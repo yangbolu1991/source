@@ -120,4 +120,12 @@ endif
 endef
 TARGET_DEVICES += ls2088ardb
 
+define Device/la1575ardb
+  DEVICE_TITLE := la1575ardb-$(SUBTARGET)
+  DEVICE_DTS = ../../../arm64/boot/dts/freescale/fsl-la1575a-rdb
+  IMAGE/firmware.bin = append-ls-dtb $$(DEVICE_DTS) | pad-to 1M | append-kernel | pad-to 6M | \
+					append-ls-rootfs-ext4 $(1) 22M | check-size 41943041
+endef
+TARGET_DEVICES += la1575ardb
+
 $(eval $(call BuildImage))

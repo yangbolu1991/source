@@ -1,0 +1,26 @@
+From 14004a1189d3cd24161eb70e2fa4dda61574df85 Mon Sep 17 00:00:00 2001
+From: Abhimanyu Saini <abhimanyu.saini@nxp.com>
+Date: Wed, 31 May 2017 12:03:58 +0530
+Subject: [PATCH 23/26] drivers: misc: vspa: Update copyright
+
+Signed-off-by: Abhimanyu Saini <abhimanyu.saini@nxp.com>
+---
+ drivers/misc/vspa/sys.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/drivers/misc/vspa/sys.c b/drivers/misc/vspa/sys.c
+index 7275401..d8d5e95 100644
+--- a/drivers/misc/vspa/sys.c
++++ b/drivers/misc/vspa/sys.c
+@@ -2,7 +2,7 @@
+  * drivers/misc/vspa.c
+  * VSPA device driver
+  *
+- * Copyright (C) 2017 NXP
++ * Copyright 2017 NXP
+  *
+  * Redistribution and use in source and binary forms, with or without
+  * modification, are permitted provided that the following conditions are met:
+-- 
+2.7.4
+

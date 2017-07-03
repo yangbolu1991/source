@@ -1,0 +1,6950 @@
+From cd48826a778e222b3e96876eedb8cf6abe392904 Mon Sep 17 00:00:00 2001
+From: Rajesh Bhagat <rajesh.bhagat@nxp.com>
+Date: Fri, 20 Jan 2017 13:59:15 +0530
+Subject: [PATCH 05/26] drivers: rf: Adds RF driver framework
+
+Adds RF driver framework which incudes:
+a. core
+b. controller
+b. and phy drivers.
+
+Signed-off-by: Rajesh Bhagat <rajesh.bhagat@nxp.com>
+---
+ drivers/Kconfig                  |    2 +
+ drivers/Makefile                 |    1 +
+ drivers/misc/fsl_types.h         |   94 ++
+ drivers/rf/Kconfig               |   40 +
+ drivers/rf/Makefile              |    7 +
+ drivers/rf/controllers/Makefile  |    1 +
+ drivers/rf/controllers/fsl_aic.c | 1554 ++++++++++++++++++++++++++++++
+ drivers/rf/controllers/fsl_aic.h |  452 +++++++++
+ drivers/rf/core/Makefile         |    2 +
+ drivers/rf/core/rf_channel.c     |  207 ++++
+ drivers/rf/core/rfdev.c          | 1249 ++++++++++++++++++++++++
+ drivers/rf/phy/Makefile          |    3 +
+ drivers/rf/phy/ad9361.c          | 1965 ++++++++++++++++++++++++++++++++++++++
+ drivers/rf/phy/ad9361.h          |  353 +++++++
+ drivers/rf/phy/tdd_int.c         |  142 +++
+ drivers/rf/phy/tdd_int.h         |   29 +
+ include/linux/rf_channel.h       |   26 +
+ include/linux/rfdev.h            |  258 +++++
+ include/linux/rfdev_ioctl.h      |  393 ++++++++
+ 19 files changed, 6778 insertions(+)
+ create mode 100644 drivers/misc/fsl_types.h
+ create mode 100644 drivers/rf/Kconfig
+ create mode 100644 drivers/rf/Makefile
+ create mode 100644 drivers/rf/controllers/Makefile
+ create mode 100644 drivers/rf/controllers/fsl_aic.c
+ create mode 100644 drivers/rf/controllers/fsl_aic.h
+ create mode 100644 drivers/rf/core/Makefile
+ create mode 100644 drivers/rf/core/rf_channel.c
+ create mode 100644 drivers/rf/core/rfdev.c
+ create mode 100644 drivers/rf/phy/Makefile
+ create mode 100644 drivers/rf/phy/ad9361.c
+ create mode 100644 drivers/rf/phy/ad9361.h
+ create mode 100644 drivers/rf/phy/tdd_int.c
+ create mode 100644 drivers/rf/phy/tdd_int.h
+ create mode 100644 include/linux/rf_channel.h
+ create mode 100644 include/linux/rfdev.h
+ create mode 100644 include/linux/rfdev_ioctl.h
+
+diff --git a/drivers/Kconfig b/drivers/Kconfig
+index d2ac339..748ee0b 100644
+--- a/drivers/Kconfig
++++ b/drivers/Kconfig
+@@ -198,4 +198,6 @@ source "drivers/hwtracing/intel_th/Kconfig"
+ 
+ source "drivers/fpga/Kconfig"
+ 
++source "drivers/rf/Kconfig"
++
+ endmenu
+diff --git a/drivers/Makefile b/drivers/Makefile
+index 098997f..f54c16c 100644
+--- a/drivers/Makefile
++++ b/drivers/Makefile
+@@ -173,3 +173,4 @@ obj-$(CONFIG_STM)		+= hwtracing/stm/
+ obj-$(CONFIG_ANDROID)		+= android/
+ obj-$(CONFIG_NVMEM)		+= nvmem/
+ obj-$(CONFIG_FPGA)		+= fpga/
++obj-$(CONFIG_RFDEVICES)		+= rf/
+diff --git a/drivers/misc/fsl_types.h b/drivers/misc/fsl_types.h
+new file mode 100644
+index 0000000..0923269
+--- /dev/null
++++ b/drivers/misc/fsl_types.h
+@@ -0,0 +1,94 @@
++/*
++* Copyright (c) 2011-2012 Freescale Semiconductor, Inc.
++*
++* Freescale IPC and HetMgr Data structures
++*
++* Author: Manish Jaggi <manish.jaggi@freescale.com>
++*
++* This software is available to you under a choice of one of two
++* licenses.  You may choose to be licensed under the terms of the GNU
++* General Public License (GPL) Version 2, available from the file
++* COPYING in the main directory of this source tree, or the BSD-type
++* license below:
++*
++* Redistribution and use in source and binary forms, with or without
++* modification, are permitted provided that the following conditions are met:
++*
++* 1. Redistributions of source code must retain the above copyright
++*    notice, this list of conditions and the following disclaimer.
++* 2. Redistributions in binary form must reproduce the above copyright
++*    notice, this list of conditions and the following disclaimer in the
++*    documentation and/or other materials provided with the distribution.
++* 3. Neither the names of the copyright holders nor the names of its
++*    contributors may be used to endorse or promote products derived from
++*    this software without specific prior written permission.
++*
++*
++* THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
++* AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
++* IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
++* ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
++* LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
++* CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
++* SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
++* INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
++* CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
++* ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
++* POSSIBILITY OF SUCH DAMAGE.
++*/
++
++#ifndef _FSL_TYPES_H
++#define _FSL_TYPES_H
++#ifdef __KERNEL__
++#include <linux/module.h>
++#include <linux/kernel.h>
++#include <linux/major.h>
++#include <linux/fcntl.h>
++#include <linux/types.h>
++#else
++typedef unsigned long phys_addr_t;
++#endif
++typedef struct {
++	phys_addr_t	phys_addr;
++	uint32_t	size;
++} mem_t;
++
++typedef struct {
++	phys_addr_t phys_addr;
++	void    *vaddr;
++	uint32_t size;
++} range_t;
++
++typedef struct {
++	uint32_t	pa_shared_size;
++	uint32_t	dsp_shared_size;
++	mem_t		pa_ccsrbar;
++	mem_t		dsp_ccsrbar;
++	mem_t		linux_priv_area;
++	mem_t		smart_dsp_os_priv_area;
++	mem_t		sh_ctrl_area;
++	mem_t		dsp_core0_m2;
++	mem_t		dsp_core1_m2;
++	mem_t		dsp_m3;
++	mem_t		dbg_area;
++} sys_map_t;
++
++typedef struct {
++	mem_t 	pa_ipc_shared;
++	mem_t	dsp_ipc_shared;
++	mem_t	pa_dbgprint_shared;
++	mem_t	dsp_dbgprint_shared;
++} shared_area_t;
++
++typedef struct {
++	uint32_t 	sem_no;
++	uint32_t	value;
++} hw_sem_t;
++
++typedef struct {
++	uint32_t	pa_uniq_val;
++	uint32_t	dsp_uniq_val;
++} hw_sem_info_t;
++
++
++#endif
+diff --git a/drivers/rf/Kconfig b/drivers/rf/Kconfig
+new file mode 100644
+index 0000000..c86cd91
+--- /dev/null
++++ b/drivers/rf/Kconfig
+@@ -0,0 +1,40 @@
++
++# RF (radio frequency) device configuration
++#
++
++menuconfig RFDEVICES
++	default y
++	bool "RF interface device support"
++	---help---
++	Support for RF interface devices for LTE/CDMA.
++	In a system supporting LTE/CDMA, different radios (RF PHYs) are
++	connected depending on required radio technology. Higher layer
++	stacks need to configure the radio according to required network mode.
++	Adding this support will export different radios connected in system
++	(in case of multi mode system)as RF interface deivces 'rf0', 'rf1' etc.
++	Higher layer stacks (running in user space)can use rfX device to
++	talk to a specific radio.
++
++	radio interface controller driver (Antenna controller) and RF PHY driver
++	connected to system must also be chosen.
++
++if RFDEVICES
++
++config RFDEV_CORE
++	default y
++	bool
++config FSL_AIC
++	default y
++	bool "Freescale Antenna Interface Controller (AIC)"
++	---help---
++	Freescale AIC controller (Antenna Interface Controller) is found
++	in bsc913x family of SOCs. AIC has six RF lanes and maximum four
++	RF PHYs can be connected and operated simultaneously.
++
++config ADI9361
++	default y
++	bool "ADI 9361 RF PHY"
++	---help---
++	ADI9361 RF phy driver.
++
++endif
+diff --git a/drivers/rf/Makefile b/drivers/rf/Makefile
+new file mode 100644
+index 0000000..61a0e7c
+--- /dev/null
++++ b/drivers/rf/Makefile
+@@ -0,0 +1,7 @@
++#
++# Makefile for the RF interface drivers.
++#
++
++obj-$(CONFIG_RFDEVICES)		+= core/
++obj-$(CONFIG_RFDEVICES)		+= controllers/
++obj-$(CONFIG_RFDEVICES)		+= phy/
+diff --git a/drivers/rf/controllers/Makefile b/drivers/rf/controllers/Makefile
+new file mode 100644
+index 0000000..6578c3c
+--- /dev/null
++++ b/drivers/rf/controllers/Makefile
+@@ -0,0 +1 @@
++obj-$(CONFIG_FSL_AIC)	+= fsl_aic.o
+diff --git a/drivers/rf/controllers/fsl_aic.c b/drivers/rf/controllers/fsl_aic.c
+new file mode 100644
+index 0000000..a2c548e
+--- /dev/null
++++ b/drivers/rf/controllers/fsl_aic.c
+@@ -0,0 +1,1554 @@
++/*
++ * drivers/rf/controllers/fsl_aic.c
++ * Freescale AIC (Antenna Controller Interface) driver
++ *
++ * AIC is the antenna interface controller found in bsc913x
++ * family of SOCs. It supports NCDMA, WCDMA-FDD, LTE-FDD, LTE-TDD
++ * and GSM-SNIFF network modes. AIC has 6 lanes on which RFICs
++ * can be connected. And AIC supports 4 RFICs working simultaneously.
++ * This driver provides only configuration path for all other modes
++ * except SNIFF because data from RFIC through AIC goes directly
++ * to a hardware accelerator from where it is taken out by DSP core
++ * in bsc913x.
++ *
++ * Author: pankaj chauhan <pankaj.chauhan@freescale.com>
++ *
++ * Copyright 2011-2013 Freescale Semiconductor, Inc.
++ *
++ * This program is free software; you can redistribute  it and/or modify it
++ * under  the terms of  the GNU General  Public License as published by the
++ * Free Software Foundation;  either version 2 of the  License, or (at your
++ * option) any later version.
++ */
++#include <linux/kernel.h>
++#include <linux/device.h>
++#include <linux/types.h>
++#include <linux/interrupt.h>
++#include <linux/rfdev.h>
++#include <linux/io.h>
++#include <linux/rfdev_ioctl.h>
++#include <linux/of_platform.h>
++#include <linux/delay.h>
++#include <linux/rf_channel.h>
++#include "fsl_aic.h"
++
++static int aic_init(struct rf_ctrl_dev *rf_dev, struct rf_init_params *params);
++static int aic_timing_source(struct rf_ctrl_dev *rf_dev, unsigned int src);
++static int aic_read(struct rf_ctrl_dev *rf_dev, u32 addr, u32 count, u32 *buff);
++static int aic_write(struct rf_ctrl_dev *rf_dev, u32 offset, u32 data);
++static int aic_phy_detached(struct rf_ctrl_dev *rf_dev);
++static int aic_start(struct rf_ctrl_dev *rf_dev);
++static int aic_stop(struct rf_ctrl_dev *rf_dev);
++static int aic_config_sniff(struct rf_ctrl_dev *rf_dev,
++		struct rf_sniff_params *sniff_params);
++
++static int aic_start_sniffer(struct aic_sniffer *sniffer);
++static void aic_free_sniffer(struct aic_sniffer *sniffer);
++static irqreturn_t aic_isr(int irq, void *arg);
++static int aic_channel_open(struct rf_ctrl_dev *rf_dev,
++		struct rf_channel *chan);
++static int aic_channel_close(struct rf_ctrl_dev *rf_dev,
++		struct rf_channel *chan);
++
++static struct rf_ctrl_ops aic_rfops = {
++	.init = aic_init,
++	.set_timing_source = aic_timing_source,
++	.read_regs = aic_read,
++	.write_reg = aic_write,
++	.phy_detach = aic_phy_detached,
++	.start = aic_start,
++	.stop = aic_stop,
++	.config_sniff = aic_config_sniff,
++	.channel_open = aic_channel_open,
++	.channel_close = aic_channel_close,
++};
++
++int aic_get_lane_id(struct rf_ctrl_dev *rf_dev)
++{
++	struct aic_lane *lane = rf_dev->priv;
++
++	return lane->id;
++}
++EXPORT_SYMBOL(aic_get_lane_id);
++
++static int aic_phy_detached(struct rf_ctrl_dev *rf_dev)
++{
++	/*Currently we do not use phy detach notification*/
++	return 0;
++}
++
++static int aic_rftimer_start(struct rf_ctrl_dev *rf_dev)
++{
++	struct aic_lane_regs *lane_regs;
++	struct aic_lane *lane = rf_dev->priv;
++	struct aic_common_regs *common_regs;
++	struct device *dev = lane->aic->dev;
++	u32 val;
++	int i, rc = 0;
++
++	common_regs = lane->aic->regs;
++	lane_regs = lane->regs;
++
++
++	val = in_be32(&lane_regs->aic_lane_tmctrl);
++
++	if ((rf_dev->timing_src == RF_PPS_SRC_GPS) ||
++		(rf_dev->timing_src == RF_PPS_SRC_RAW_GPS) ||
++		(rf_dev->timing_src == RF_PPS_SRC_PTP)) {
++
++		val |= GPS_EN;
++
++		out_be32(&lane_regs->aic_lane_tmctrl, val);
++
++		for (i = 0; i < SYNC_WAIT; i++) {
++			val = in_be32(&lane_regs->aic_lane_tmctrl);
++			if (!(val & (GPS_EN))) {
++				dev_info(dev, "%s:GPS_EN cleared %x\n",
++						rf_dev->name, val);
++				break;
++			}
++			mdelay(100);
++		}
++
++		if (val & (GPS_EN)) {
++			dev_info(dev, "%s:GPS_EN did not clr %x\n",
++					rf_dev->name, val);
++			rc = -EAGAIN;
++			goto out;
++		}
++	}
++
++	val |= SYNC_EN;
++
++	out_be32(&lane_regs->aic_lane_tmctrl, val);
++	for (i = 0; i < SYNC_WAIT; i++) {
++		val = in_be32(&lane_regs->aic_lane_tmctrl);
++		if (!(val & (SYNC_EN))) {
++			dev_info(dev, "%s:sync cleared %x\n",
++					rf_dev->name, val);
++			break;
++		}
++		mdelay(100);
++	}
++
++	if (val & (SYNC_EN)) {
++		dev_info(dev, "%s:sync did not clr %x\n", rf_dev->name, val);
++		rc = -EAGAIN;
++		goto out;
++	}
++
++	if ((rf_dev->net_mode == LTE_TDD) || (rf_dev->net_mode == LTE_FDD))
++		val |= LTE_EN;
++
++	out_be32(&lane_regs->aic_lane_tmctrl, val);
++
++	spin_lock(&lane->aic->lock);
++	val = in_be32(&common_regs->ppc_interrupt_ctrl_reg);
++	val |= (ADILANE0_DL_TTI << (lane->id * ADILANE_DL_TTI_SHIFT));
++	out_be32(&common_regs->ppc_interrupt_ctrl_reg, val);
++	spin_unlock(&lane->aic->lock);
++
++	rf_dev->rftimer_started = 1;
++out:
++	return rc;
++}
++
++static int aic_start(struct rf_ctrl_dev *rf_dev)
++{
++	struct aic_lane *lane = rf_dev->priv;
++	int rc = 0;
++
++	if (!rf_dev->rftimer_started)
++		rc = aic_rftimer_start(rf_dev);
++
++	if (lane->sniffer) {
++		rc = aic_start_sniffer(lane->sniffer);
++		if (rc)
++			goto out;
++	}
++
++out:
++	return rc;
++}
++
++static int aic_stop(struct rf_ctrl_dev *rf_dev)
++{
++	struct aic_lane_regs *lane_regs;
++	struct aic_lane *lane = rf_dev->priv;
++	struct aic_common_regs *common_regs;
++	u32 val;
++	int i;
++
++	common_regs = lane->aic->regs;
++	lane_regs = lane->regs;
++
++	rf_dev->rftimer_started = 0;
++
++	/* Disable LTE for TDD and FDD modes */
++	val = in_be32(&lane_regs->aic_lane_tmctrl);
++	if ((rf_dev->net_mode == LTE_TDD) || (rf_dev->net_mode == LTE_FDD))
++		val &= ~LTE_EN;
++	out_be32(&lane_regs->aic_lane_tmctrl, val);
++
++	spin_lock(&lane->aic->lock);
++	/* Disable DL_TTI interrupt in ppc_interrupt_ctrl_reg */
++	val = in_be32(&common_regs->ppc_interrupt_ctrl_reg);
++	val &= ~(ADILANE0_DL_TTI << (lane->id * ADILANE_DL_TTI_SHIFT));
++	out_be32(&common_regs->ppc_interrupt_ctrl_reg, val);
++	spin_unlock(&lane->aic->lock);
++
++	swait_wake_all(&rf_dev->wait_q);
++
++	if (rf_dev->data_chans_enabled) {
++		for (i = lane->num_chan - 1; i >= 0; i--) {
++			aic_channel_close(rf_dev, rf_dev->channels[i]);
++			rf_dev->channels[i] = NULL;
++		}
++	}
++
++	if (lane->sniffer)
++		aic_free_sniffer(lane->sniffer);
++
++	rf_dev->data_chans_enabled = 0;
++	rf_dev->sniff_enabled = 0;
++	rf_dev->net_mode = NET_MODE_END;
++	rf_dev->tx_rxmode = TXRX_MODE_END;
++	rf_dev->bw = BW_END;
++	memset(&rf_dev->dev_params, 0, sizeof(struct rf_dev_params));
++	memset(&rf_dev->stats, 0, sizeof(struct rf_stats));
++	rf_dev->frame_count0 = 0;
++	rf_dev->frame_count1 = 0;
++
++	return 0;
++}
++
++static int aic_write(struct rf_ctrl_dev *rf_dev, u32 offset, u32 data)
++{
++	struct aic_lane *lane = rf_dev->priv;
++	struct aic_lane_regs *lane_regs;
++	struct aic_common_regs *aic_regs;
++	int is_common_reg = 1;
++	u32 *addr;
++
++	if (offset > (2 * sizeof(struct aic_lane_regs)))
++		return -EINVAL;
++
++	if (offset & LANE_REGDUMP_OFFSET) {
++		is_common_reg = 0;
++		offset -= LANE_REGDUMP_OFFSET;
++	}
++
++	if (is_common_reg) {
++		aic_regs = lane->aic->regs;
++		addr = (u32 *) ((u32) &aic_regs->aic_ip_version + offset);
++	} else {
++		lane_regs = lane->regs;
++		addr = (u32 *) ((u32) &lane_regs->aic_dma_riqmts + offset);
++	}
++
++	out_be32(addr, data);
++
++	return 0;
++}
++
++static int aic_read(struct rf_ctrl_dev *rf_dev, u32 start_offset,
++		u32 count, u32 *buff)
++{
++	struct aic_lane *lane = rf_dev->priv;
++	struct aic_lane_regs *lane_regs;
++	struct aic_common_regs *aic_regs;
++	u32 *reg_addr, *start_addr;
++	int i, is_common_reg = 1;
++
++	if (start_offset > (2 * sizeof(struct aic_lane_regs)))
++		return -EINVAL;
++
++	if (start_offset & LANE_REGDUMP_OFFSET) {
++		is_common_reg = 0;
++		start_offset -= LANE_REGDUMP_OFFSET;
++	}
++	if (is_common_reg) {
++		aic_regs = lane->aic->regs;
++		start_addr = &aic_regs->aic_ip_version;
++		start_addr = (u32 *)((u32) start_addr + start_offset);
++		for (i = 0; i < count; i++) {
++			reg_addr = start_addr + i;
++			buff[i] = in_be32(reg_addr);
++		}
++	} else {
++		lane_regs = lane->regs;
++		start_addr = &lane_regs->aic_dma_riqmts;
++		start_addr = (u32 *)((u32)start_addr +  start_offset);
++		for (i = 0; i < count; i++) {
++			reg_addr = start_addr + i;
++			buff[i] = in_be32(reg_addr);
++		}
++	}
++
++	return 0;
++}
++
++static int aic_timing_source(struct rf_ctrl_dev *rf_dev, unsigned int src)
++{
++	struct aic_lane *lane = rf_dev->priv;
++	struct aic_lane_regs *regs;
++	u32 val;
++	int rc = 0;
++
++	regs = lane->regs;
++	val = in_be32(&regs->aic_netw_conf1);
++	val &= ~PPS_TRIG_MASK;
++	switch (src) {
++	case RF_PPS_SRC_GPS:
++	case RF_PPS_SRC_PTP:
++		val |= PPS_TRIG_PTP;
++		break;
++	case RF_PPS_SRC_RAW_GPS:
++		val |= PPS_TRIG_RAW_PPS;
++		break;
++	case RF_PPS_SRC_NLM:
++		val |= PPS_TRIG_NLM;
++		break;
++	default:
++		rc = -EINVAL;
++	}
++
++	rf_dev->timing_src = src;
++	out_be32(&regs->aic_netw_conf1, val);
++
++	return rc;
++}
++
++static irqreturn_t aic_isr(int irq, void *arg)
++{
++	struct aic_lane *lane = (struct aic_lane *) arg;
++	struct aic_lane_stats *stats;
++	struct aic_common_regs *common_regs;
++	u32 val;
++
++	common_regs = lane->aic->regs;
++	stats = &lane->stats;
++	val = in_be32(&common_regs->ppc_interrupt_status_reg);
++	val &= (ADILANE0_DL_TTI << (ADILANE_DL_TTI_SHIFT * lane->id));
++	if (val) {
++		stats->dl_tti_count++;
++		rf_notify_dl_tti(lane->rf_dev);
++		out_be32(&common_regs->ppc_interrupt_status_reg, val);
++	}
++
++	return IRQ_HANDLED;
++}
++
++static irqreturn_t aic_sniffer_isr(int irq, void *arg)
++{
++	struct aic_dev *dev = (struct aic_dev *) arg;
++	struct aic_common_regs *common_regs;
++	struct aic_lane *lane;
++	struct aic_sniffer *sniffer = NULL;
++	struct aic_sniff_regs *sniff_regs;
++	u32 val;
++
++	common_regs = dev->regs;
++
++	val = in_be32(&common_regs->ppc_interrupt_status_reg);
++	if (!val)
++		return IRQ_NONE;
++	if (val & PPC_ISR_SNIFF0_CAPT_DONE_INT) {
++		/* Clear ppc interrupt status register */
++		out_be32(&common_regs->ppc_interrupt_status_reg,
++				PPC_ISR_SNIFF0_CAPT_DONE_INT);
++		sniffer = &dev->sniffers[0];
++	}
++	if (val & PPC_ISR_SNIFF1_CAPT_DONE_INT) {
++		/* Clear ppc interrupt status register */
++		out_be32(&common_regs->ppc_interrupt_status_reg,
++				PPC_ISR_SNIFF1_CAPT_DONE_INT);
++		sniffer = &dev->sniffers[1];
++	}
++
++	/* clear capture complete interrupt */
++	if (sniffer) {
++		sniff_regs = sniffer->regs;
++		lane = sniffer->lane;
++		out_be32(&sniff_regs->aic_sniff_int_stat, CAP_INT_STAT);
++		sniffer->capture_done = 1;
++		if (lane->rx_dma_done == lane->rx_dma_done_mask) {
++			rf_sniff_done(lane->rf_dev, 0);
++			lane->rf_dev->data_chans_enabled = 0;
++			val = in_be32(&lane->regs->aic_dma_dcr);
++			val &= ~RIQE;
++			out_be32(&lane->regs->aic_dma_dcr, val);
++			lane->rx_dma_done = 0;
++		}
++	}
++
++	return IRQ_HANDLED;
++}
++
++static void aic_dma_isr(struct aic_lane *lane, u32 flag)
++{
++	struct aic_lane_regs *regs = lane->regs;
++	struct aic_sniffer *sniffer = lane->sniffer;
++	struct aic_lane_stats *stats = &lane->stats;
++	struct rf_frame frame;
++	u32 val, curr_disp, displacement, temp;
++
++	curr_disp = in_be32(&regs->aic_dma_riqbdr);
++	displacement = (curr_disp - stats->prev_disp) & RIQBDR_MASK;
++	val = in_be32(&regs->aic_dma_riqt);
++	temp = displacement % val;
++	displacement /= val;
++	stats->prev_disp = (curr_disp - temp) & RIQBDR_MASK;
++	if (flag & ANT0_RIQTI) {
++		frame.ant = 0;
++		frame.buf.buffer_idx = lane->rx_ant0_idx;
++		lane->rx_ant0_idx += displacement;
++		if (lane->rx_ant0_idx == sniffer->capt_dur_frms) {
++			stats->rx_ant0_frames += lane->rx_ant0_idx;
++			lane->rx_ant0_idx = 0;
++			lane->rx_dma_done |= (AIC_DMA_DONE << frame.ant);
++		}
++		rf_rx_frame(lane->rf_dev, &frame);
++		out_be32(&regs->aic_dma_isr, ANT0_RIQTI);
++	}
++
++	if (flag & ANT1_RIQTI) {
++		frame.ant = 1;
++		frame.buf.buffer_idx = lane->rx_ant1_idx;
++		lane->rx_ant1_idx += displacement;
++		if (lane->rx_ant1_idx == sniffer->capt_dur_frms) {
++			stats->rx_ant1_frames += lane->rx_ant1_idx;
++			lane->rx_ant1_idx = 0;
++			lane->rx_dma_done |= (AIC_DMA_DONE << frame.ant);
++		}
++		rf_rx_frame(lane->rf_dev, &frame);
++		out_be32(&regs->aic_dma_isr, ANT1_RIQTI);
++	}
++
++	if ((lane->rx_dma_done == lane->rx_dma_done_mask) &&
++		sniffer->capture_done) {
++		rf_sniff_done(lane->rf_dev, frame.ant);
++		lane->rf_dev->data_chans_enabled = 0;
++		val = in_be32(&regs->aic_dma_dcr);
++		val &= ~RIQE;
++		out_be32(&regs->aic_dma_dcr, val);
++		lane->rx_dma_done = 0;
++	}
++}
++
++static irqreturn_t aic_dsp_gen_isr(int irq, void *arg)
++{
++	struct aic_dev *dev = (struct aic_dev *) arg;
++	struct aic_lane *lane;
++	int i;
++	u32 val;
++
++	/* GIR_ANT register does not latch status bits,
++	 * it samples the interrupt line and reports status
++	 * thus there is no need to clear status bits which
++	 * are set in GIR_ANT
++	 */
++
++	val = in_be32(dev->gir_ant);
++	if (!(val & AIC_IRQ_ANT29))
++		return IRQ_HANDLED;
++
++	/* Traverse the 6 lanes of aic dev to find the lane on which
++	 * DMA threshold interrupts are coming */
++
++	for (i = 0; i < 6; i++) {
++		lane = dev->lanes[i];
++		if (!lane || lane->rf_dev->state < RF_INITIALIZED)
++			continue;
++		else {
++			val = in_be32(&lane->regs->aic_dma_isr);
++			val &= (ANT0_RIQTI | ANT1_RIQTI);
++			if (val)
++				aic_dma_isr(lane, val);
++		}
++	}
++
++	return IRQ_HANDLED;
++
++}
++
++static int aic_adilane_init(struct aic_lane *lane,
++	struct rf_init_params *params)
++{
++	struct aic_common_regs *common_regs;
++	struct device *dev = lane->aic->dev;
++	u32 val, temp;
++	unsigned int svr = mfspr(SPRN_SVR);
++
++	common_regs = lane->aic->regs;
++	/*txrx mode*/
++	switch (params->tx_rxmode) {
++	case TXRX_1T1R:
++		val = TXRX_MODE_1T1R;
++		break;
++	case TXRX_1T2R:
++		val = TXRX_MODE_1T2R;
++		break;
++	case TXRX_2T2R:
++		val = TXRX_MODE_2T2R;
++		break;
++	default:
++		dev_err(dev, "Invalid tx_rx mode %d\n", params->tx_rxmode);
++		return -EINVAL;
++	}
++
++	val |= ADI_MCLK_EN;
++
++	if ((params->mode == LTE_TDD) &&
++			((svr | SVR_SECURE_MASK) != SVR_9132S_REV1))
++		val |= (HALF_DUPLEX | SINGLE_PORT);
++	else
++		val &= ~(HALF_DUPLEX | SINGLE_PORT);
++
++	if (lane->id == 3)
++		temp = (u32)(u32 *)(&common_regs->jesd3_cntl);
++	else
++		temp = (u32)((u32 *)(&common_regs->jesd0_cntl) +
++			(2 * lane->id));
++	out_be32((u32 *)temp, val);
++
++	return 0;
++}
++
++int aic_get_dev_params(struct rf_ctrl_dev *rf_dev,
++	struct rf_init_params *init_params)
++{
++	struct rf_dev_params *params = &rf_dev->dev_params;
++	struct aic_lane *lane = rf_dev->priv;
++	struct device *dev = lane->aic->dev;
++
++	if ((init_params->mode == LTE_TDD) || (init_params->mode == LTE_FDD)) {
++		switch (init_params->bw) {
++
++		case BW_05_MHZ:
++			params->symbol_len = 512;
++			params->chips_per_slot = 3840;
++			if (init_params->long_cp) {
++				params->cp0_len = 128;
++				params->cp1_len = 128;
++			} else {
++				params->cp0_len = 40;
++				params->cp1_len = 36;
++			}
++			break;
++		case BW_10_MHZ:
++			params->symbol_len = 1024;
++			params->chips_per_slot = 7680;
++			if (init_params->long_cp) {
++				params->cp0_len = 256;
++				params->cp1_len = 256;
++			} else {
++				params->cp0_len = 80;
++				params->cp1_len = 72;
++			}
++			break;
++		case BW_15_MHZ:
++			params->symbol_len = 1536;
++			params->chips_per_slot = 11520;
++			if (init_params->long_cp) {
++				params->cp0_len = 384;
++				params->cp1_len = 384;
++			} else {
++				params->cp0_len = 120;
++				params->cp1_len = 108;
++			}
++			break;
++		case BW_20_MHZ:
++			params->symbol_len = 2048;
++			params->chips_per_slot = 15360;
++			if (init_params->long_cp) {
++				params->cp0_len = 512;
++				params->cp1_len = 512;
++			} else {
++				params->cp0_len = 160;
++				params->cp1_len = 144;
++			}
++			break;
++		default:
++			dev_dbg(dev, "%s: Bandwidth %d not supported\n",
++				rf_dev->name, init_params->bw);
++			return -EINVAL;
++		}
++		params->subfrm_per_frm = 10;
++		params->slots_per_subfrm = 2;
++		if (init_params->long_cp)
++			params->symbols_per_slot = 6;
++		else
++			params->symbols_per_slot = 7;
++	} else {
++		params->symbol_len = 16;
++		params->chips_per_slot = 256;
++		params->subfrm_per_frm = 15;
++		params->slots_per_subfrm = 10;
++		params->symbols_per_slot = 16;
++	}
++	params->long_cp = init_params->long_cp;
++	params->ants = init_params->ants;
++
++	return 0;
++}
++
++
++static int init_lte_tdd_frame_struct(struct rf_ctrl_dev *rf_dev,
++	struct rf_init_params *init_params)
++{
++	int rc = 0, i, sym_len_short, sym_len_long;
++	int short_syms, long_syms, chips_per_tti;
++	u32 subfrm_enable_mask, dl_slot_val = 0, ul_slot_val = 0;
++	u32 val, spl_slot_val = 0, uppts_len, dwpts_len;
++	struct aic_lane *lane = rf_dev->priv;
++	struct rf_dev_params *params = &rf_dev->dev_params;
++	struct aic_lane_regs *regs;
++	struct device *dev = lane->aic->dev;
++
++	regs = lane->regs;
++
++	/* aic_lane_dlslot/aic_lane_ulslot registers have 1 bit
++	 * per slot. But they are always enabled/disabled in pairs
++	 * i.e on subframe basis, thats why we have mask 0x3 (Enable
++	 * both slots of subframe 0)
++	 */
++	subfrm_enable_mask = 0x3;
++
++	for (i = 0; i < LTE_SUBFRM_PER_FRM; i++) {
++
++		switch (init_params->tdd_dl_ul_conf[i]) {
++		case DL:
++			dl_slot_val |= subfrm_enable_mask << (i * 2);
++			break;
++
++		case UL:
++			ul_slot_val |= subfrm_enable_mask << (i * 2);
++			break;
++
++		case SPL:
++			spl_slot_val |= subfrm_enable_mask << (i * 2);
++			break;
++
++		default:
++			dev_err(dev, "Invalid tdd frame structure\n");
++			rc = -EINVAL;
++			goto out;
++		}
++	}
++
++	out_be32(&regs->aic_lane_dlslot, dl_slot_val);
++	out_be32(&regs->aic_lane_ulslot, ul_slot_val);
++	out_be32(&regs->aic_lane_spslot, spl_slot_val);
++
++	sym_len_short = params->symbol_len + params->cp1_len;
++	sym_len_long = params->symbol_len + params->cp0_len;
++
++	/*DWPTS/UPPTS is programmed in chips, where as from user space
++	 * they come in terms of symbols. Conversion also takes
++	 * case of using right symbol lengths, for example if
++	 * uppts is 3 symbols then we have 2 short symbols and
++	 * one long
++	 */
++	long_syms = (init_params->tdd_dwpts + params->symbols_per_slot)/
++			params->symbols_per_slot;
++	short_syms  = init_params->tdd_dwpts - long_syms;
++	dwpts_len = (sym_len_short * short_syms) + (sym_len_long * long_syms);
++
++	val = ((dwpts_len - 1) & DWPTS_MASK) << DWPTS_SHIFT;
++
++	uppts_len = sym_len_short * init_params->tdd_uppts;
++
++	val |= ((uppts_len - 1) & UPPTS_MASK) << UPPTS_SHIFT;
++
++	out_be32(&regs->aic_netw_conf2, val);
++
++	dev_dbg(dev, "dwpts %d, gp %d, uppts %d\n", init_params->tdd_dwpts,
++		init_params->tdd_gp, init_params->tdd_uppts);
++
++	dev_dbg(dev, "[chips] dwpts %d, uppts %d\n", dwpts_len, uppts_len);
++
++	chips_per_tti = params->chips_per_slot * params->slots_per_subfrm;
++	val = chips_per_tti - uppts_len;
++	val = val - 1;
++
++	out_be32(&regs->aic_netw_conf3, val);
++out:
++	return rc;
++}
++
++static int aic_init(struct rf_ctrl_dev *rf_dev,
++		struct rf_init_params *init_params)
++{
++	struct aic_lane *lane = rf_dev->priv;
++	struct rf_dev_params *params = &rf_dev->dev_params;
++	struct aic_dev *aic = lane->aic;
++	struct aic_common_regs *common_regs;
++	struct aic_lane_regs *regs;
++	struct device *dev = lane->aic->dev;
++	u32 val, temp, sym0_len, rest_syms_len;
++	int rc = 0, agc_strobe_shift;
++
++	if (rf_dev->bw != init_params->bw ||
++		rf_dev->tx_rxmode != init_params->tx_rxmode ||
++		rf_dev->net_mode != init_params->mode ||
++		params->long_cp != init_params->long_cp)
++		rf_dev->rftimer_started = 0;
++
++	rc = aic_get_dev_params(rf_dev, init_params);
++	if (rc)
++		goto out;
++
++	common_regs = lane->aic->regs;
++	regs = lane->regs;
++
++	out_be32(&regs->rftimer_isr, 0x7f);
++
++	if (init_params->ul_delay)
++		temp = init_params->ul_delay & UL_DELAY_MASK;
++	else if (init_params->mode == WCDMA_FDD)
++		temp = DEFAULT_WCDMA_UL_DELAY & UL_DELAY_MASK;
++	else
++		temp = DEFAULT_UL_DELAY & UL_DELAY_MASK;
++
++	val = temp << UL_DELAY_SHIFT;
++
++	if (init_params->dl_delay)
++		temp = init_params->dl_delay & DL_DELAY_MASK;
++	else if (init_params->mode == WCDMA_FDD)
++		temp = DEFAULT_WCDMA_DL_DELAY & DL_DELAY_MASK;
++	else
++		temp = DEFAULT_DL_DELAY & DL_DELAY_MASK;
++
++	val |= temp << DL_DELAY_SHIFT;
++	out_be32(&regs->aic_dlul_delay, val);
++
++	rc = aic_adilane_init(lane, init_params);
++	if (rc)
++		goto out;
++
++	/*Frame structure*/
++	temp = ((params->subfrm_per_frm - 1) & SUBFRM_PER_FRM_MASK);
++	temp <<= SUBFRM_PER_FRM_SHIFT;
++	val = temp;
++	temp = ((params->slots_per_subfrm - 1) & SLOT_PER_SUBFRM_MASK);
++	temp = temp << SLOT_PER_SUBFRM_SHIFT;
++	val |= temp;
++
++	temp = ((params->chips_per_slot - 1) & CHIPS_PER_SLOT_MASK);
++	temp <<= CHIPS_PER_SLOT_SHIFT;
++	val |= temp;
++	out_be32(&regs->aic_frame_conf, val);
++
++	/*Network conf*/
++	temp = params->chips_per_slot * params->slots_per_subfrm;
++	val = in_be32(&regs->aic_netw_conf1);
++	val &= ~(SYM_PER_SLOT_MASK | (TOTAL_LEN_MASK << TOTAL_LEN_SHIFT));
++	val |= (temp & TOTAL_LEN_MASK) << TOTAL_LEN_SHIFT;
++	temp = ((params->symbols_per_slot - 1) & SYM_PER_SLOT_MASK);
++	temp <<= SYM_PER_SLOT_SHIFT;
++	val |= temp;
++	out_be32(&regs->aic_netw_conf1, val);
++
++	if ((init_params->mode == LTE_FDD) ||
++		(init_params->mode == WCDMA_FDD)) {
++		/*Enable transmission from slot0 - slot19*/
++		out_be32(&regs->aic_lane_dlslot, 0xfffff);
++		out_be32(&regs->aic_lane_ulslot, 0xfffff);
++	} else if (init_params->mode == LTE_TDD) {
++		rc = init_lte_tdd_frame_struct(rf_dev, init_params);
++		if (rc)
++			goto out;
++	}
++	sym0_len = params->symbol_len + params->cp0_len;
++	rest_syms_len = params->symbol_len + params->cp1_len;
++
++	/* AIC starts counting from 0, so program len - 1*/
++	sym0_len--;
++	rest_syms_len--;
++
++	out_be32(&regs->aic_symconf0, sym0_len);
++	out_be32(&regs->aic_symconf1, rest_syms_len);
++	out_be32(&regs->aic_symconf2, rest_syms_len);
++	out_be32(&regs->aic_symconf3, rest_syms_len);
++	out_be32(&regs->aic_symconf4, rest_syms_len);
++	out_be32(&regs->aic_symconf5, rest_syms_len);
++	if (!init_params->long_cp)
++		out_be32(&regs->aic_symconf6, rest_syms_len);
++	else
++		out_be32(&regs->aic_symconf6, 0);
++
++	if (init_params->mode == WCDMA_FDD) {
++		out_be32(&regs->aic_symconf6, rest_syms_len);
++		out_be32(&regs->aic_symconf7, 15);
++		temp = CHIPRATE_REFCLK_WCDMA - 1;
++	}
++
++	else
++		temp = CHIPRATE_REFCLK - 1;
++	out_be32(&regs->aic_ref_framconf, temp);
++
++	/* Connect AGC_STROBE of this lane. For lane 0, 1
++	 * AGC_STROBE_1 is used and for lne 2 AGC_STROBE_2
++	 * is used
++	 */
++	switch (lane->id) {
++	case 0:
++	case 1:
++		agc_strobe_shift = AGC_STROBE_1_SHIFT;
++		break;
++	case 2:
++		agc_strobe_shift = AGC_STROBE_2_SHIFT;
++		break;
++	default:
++		dev_err(dev, "Strobe for lane %d not defined\n", lane->id);
++		rc = -EINVAL;
++		goto out;
++	}
++
++	spin_lock(&aic->lock);
++
++	val = in_be32(&common_regs->aic_interconnect);
++	val &= ~(AGC_STROBE_MASK << agc_strobe_shift);
++	val |=  (lane->id << agc_strobe_shift);
++	out_be32(&common_regs->aic_interconnect, val);
++
++	spin_unlock(&aic->lock);
++
++	/* Generate AGC_STROBE on RL delayed TTI */
++	val = in_be32(&regs->aic_lane_tmctrl);
++	val &= ~AGC_STRB_SEL_MASK;
++	val |= AGC_STRB_SEL_TTI_RLD;
++	out_be32(&regs->aic_lane_tmctrl, val);
++
++	rf_dev->net_mode = init_params->mode;
++	rf_dev->bw = init_params->bw;
++	rf_dev->tx_rxmode = init_params->tx_rxmode;
++
++	return rc;
++out:
++	rf_dev->data_chans_enabled = 0;
++	return rc;
++}
++
++static int aic_channel_open(struct rf_ctrl_dev *rf_dev,
++		struct rf_channel *chan)
++{
++	struct aic_lane *lane = rf_dev->priv;
++	struct aic_lane_regs *regs = lane->regs;
++	struct device *dev = lane->aic->dev;
++	u32 val;
++
++	/* Currently DMA configuration is done only for receive path.*/
++	if (chan->flags & RF_CHAN_DIR_TX) {
++		dev_err(dev, "Channel open for TX not supported\n");
++		return -EINVAL;
++	}
++	if (lane->num_chan == AIC_MAX_NUM_CHANNELS) {
++		dev_err(dev, "AIC DMA channel more than %d not supported\n",
++				AIC_MAX_NUM_CHANNELS);
++		return -EINVAL;
++	}
++	if (lane->num_chan == 1) {
++		val = in_be32(&regs->aic_dma_riqbs);
++		if ((val & RIQBS_MASK) != chan->rx_buf_size) {
++			dev_err(dev, "Rx buffer size should be same "
++					"for both channels\n");
++			return -EINVAL;
++		}
++	}
++	lane->num_chan++;
++	/*
++	 * Lane specific configuration should be done only once for
++	 * multiple channels.
++	 */
++
++	if (lane->num_chan == 1) {
++
++		/* clear DMA registers to re-configure */
++		out_be32(&regs->aic_dma_dmsr, 0);
++		out_be32(&regs->aic_dma_dcr, 0);
++		out_be32(&regs->aic_dma_ier, 0);
++
++		val = in_be32(&regs->aic_dma_dmsr);
++
++		/* RDD for PA side DMA should be unicast to system memory */
++		val &= RDD_MASK;
++		val |= RDD_UNI_SYS_MEM;
++
++		if (chan->flags & RF_CHAN_XFER_MODE_SNIFF)
++			val &= ~DBL_BUF_MODE;
++		else if (chan->flags & RF_CHAN_XFER_MODE_LTE)
++			val |= DBL_BUF_MODE;
++
++		if (rf_dev->net_mode == WCDMA_FDD) {
++			/* oversampling is enabled for WCDMA. */
++			val &= RX_OVERSAMPLING;
++
++			/* Receive sample width is 8 bit for IQ samples */
++			val |= RSW_8B;
++		} else {
++			/* oversampling is disabled by default. */
++			val &= ~RX_OVERSAMPLING;
++
++			/* Receive sample width is 16 bit for IQ samples */
++			val |= RSW_16B;
++		}
++		out_be32(&regs->aic_dma_dmsr, val);
++
++		/* Set receive IQ buffer size */
++		val = chan->rx_buf_size & RIQBS_MASK;
++		out_be32(&regs->aic_dma_riqbs, val);
++	}
++	if (chan->ant == 0) {
++		/* Enable Receive IQ threshold interrupt for ANT0 */
++		val = in_be32(&regs->aic_dma_ier);
++		val |= (ANT0_RIQTIE | RIQOIE);
++		out_be32(&regs->aic_dma_ier, val);
++		if (chan->flags & RF_CHAN_MMAPED) {
++			val = chan->bufs.mmap_bufs.rx_base_phys
++					& RIQBA_MASK;
++			out_be32(&regs->aic_dma_riqba0, val);
++		}
++	} else {
++		/* Enable Receive IQ threshold interrupt for ANT1 */
++		val = in_be32(&regs->aic_dma_ier);
++		val |= (ANT1_RIQTIE | RIQOIE);
++		out_be32(&regs->aic_dma_ier, val);
++		if (chan->flags & RF_CHAN_MMAPED) {
++			val = chan->bufs.mmap_bufs.rx_base_phys
++					& RIQBA_MASK;
++			out_be32(&regs->aic_dma_riqba1, val);
++		}
++	}
++	/* Enable DSP general interrupt */
++	out_be32(lane->aic->gir_ant_en_mpic, AIC_IRQ_ANT29);
++
++	return 0;
++}
++
++static int aic_channel_close(struct rf_ctrl_dev *rf_dev,
++		struct rf_channel *chan)
++{
++	struct aic_lane *lane = rf_dev->priv;
++	struct aic_common_regs *common_regs = lane->aic->regs;
++	struct aic_sniffer *sniffer = lane->sniffer;
++	struct aic_lane_regs *regs;
++	struct device *dev = lane->aic->dev;
++	u32 val;
++	int rc = 0, retries = 0;
++
++	regs = lane->regs;
++	lane->num_chan--;
++	if (lane->num_chan == 0) {
++		/* Disable DSP general interrupt */
++		val = in_be32(lane->aic->gir_ant_en_mpic);
++		val &= ~AIC_IRQ_ANT29;
++		out_be32(lane->aic->gir_ant_en_mpic, val);
++
++		/* Disable capture complete interrupt */
++		if (sniffer) {
++			val = in_be32(&sniffer->regs->aic_sniff_inten);
++			val &= ~CAP_INT_EN;
++			out_be32(&sniffer->regs->aic_sniff_inten, val);
++		}
++		/* Disable Receive DMA */
++		val = in_be32(&regs->aic_dma_dcr);
++		val &= ~RIQE;
++		out_be32(&regs->aic_dma_dcr, val);
++
++		val = in_be32(&regs->aic_dma_dsr);
++		while ((val & RIQS) && retries < DMA_STATUS_RETRIES) {
++			val = in_be32(&regs->aic_dma_dsr);
++			mdelay(1);
++			retries++;
++		}
++		if (val & RIQS) {
++			dev_err(dev, "RIQS did not clear \n");
++			rc = -EBUSY;
++			goto out;
++		}
++		/* Set Receive IQ Threshold as 0 */
++		out_be32(&regs->aic_dma_riqt, 0);
++
++		/* Set receive IQ buffer size as 0*/
++		out_be32(&regs->aic_dma_riqbs, 0);
++
++		if (sniffer) {
++			/* disable PPC sniff capt done interrupt */
++			spin_lock(&lane->aic->lock);
++			val = in_be32(&common_regs->ppc_interrupt_ctrl_reg);
++			if (sniffer->id == 0)
++				val &= ~IE_PPC_SNIFF0_CAPT_DONE_INT;
++			else if (sniffer->id == 1)
++				val &= ~IE_PPC_SNIFF1_CAPT_DONE_INT;
++			out_be32(&common_regs->ppc_interrupt_ctrl_reg, val);
++			spin_unlock(&lane->aic->lock);
++		}
++		/* clear DMA registers */
++		out_be32(&regs->aic_dma_dmsr, 0);
++		out_be32(&regs->aic_dma_dcr, 0);
++		out_be32(&regs->aic_dma_ier, 0);
++	}
++
++	/* Disable Receive IQ threshold interrupt */
++	if (chan->ant == 0) {
++		val = in_be32(&regs->aic_dma_ier);
++		val &= ~(ANT0_RIQTIE | RIQOIE);
++		out_be32(&regs->aic_dma_ier, val);
++		out_be32(&regs->aic_dma_riqba0, 0);
++	} else {
++		val = in_be32(&regs->aic_dma_ier);
++		val &= ~(ANT1_RIQTIE | RIQOIE);
++		out_be32(&regs->aic_dma_ier, val);
++		out_be32(&regs->aic_dma_riqba1, 0);
++	}
++
++out:
++	return rc;
++}
++
++static struct aic_sniffer *aic_get_sniffer(struct aic_lane *lane)
++{
++	struct aic_dev *aic = lane->aic;
++	struct aic_sniffer *sniffer = NULL;
++	int i;
++
++	/* Currently we search for available sniffer, and assign to the lane
++	 * If required we can give specific sniffer to a lane as well
++	 * that's why we take lane as parameter for this function
++	 */
++	for (i = 0; i < AIC_NUM_SNIFFER_BLKS; i++) {
++		sniffer = &aic->sniffers[i];
++		if (atomic_xchg(&sniffer->in_use, 1))
++			sniffer = NULL;
++		else
++			break;
++	}
++
++	if (sniffer) {
++		sniffer->lane = lane;
++		lane->sniffer = sniffer;
++		atomic_inc(&aic->sniffers_in_use);
++	}
++
++	return sniffer;
++}
++
++static void aic_free_sniffer(struct aic_sniffer *sniffer)
++{
++	struct aic_lane *lane;
++	struct aic_sniff_regs *sniff_regs = sniffer->regs;
++	u32 val;
++
++	spin_lock(&sniffer->lock);
++
++	atomic_set(&sniffer->in_use, 0);
++	val = in_be32(&sniff_regs->aic_sniff_ctrl);
++	val &= ~(REFCNT_EN | CHP_SEL_MASK | REF_SEL_MASK);
++	out_be32(&sniff_regs->aic_sniff_ctrl, val);
++	sniffer->intialized = 0;
++	sniffer->gps_synced = 0;
++	lane = sniffer->lane;
++	sniffer->lane = NULL;
++	if (lane) {
++		lane->sniffer = NULL;
++		if (!atomic_dec_and_test(&lane->aic->sniffers_in_use))
++			lane->aic->sniff_timing_src = RF_PPS_SRC_END;
++	}
++	spin_unlock(&sniffer->lock);
++}
++
++static int aic_start_sniffer(struct aic_sniffer *sniffer)
++{
++	struct aic_lane *lane = sniffer->lane;
++	struct aic_lane_stats *stats = &lane->stats;
++	struct rf_ctrl_dev *rf_dev = lane->rf_dev;
++	struct device *dev = lane->aic->dev;
++	struct aic_sniff_regs  *sniff_regs = sniffer->regs;
++	u32 val;
++	int rc = 0, i;
++
++	if (!sniffer->intialized) {
++		dev_err(dev, "Sniffer must be intialized before starting\n");
++		return -EAGAIN;
++	}
++
++	if (!sniffer->gps_synced) {
++		spin_lock(&sniffer->lock);
++		val = in_be32(&sniff_regs->aic_sniff_ctrl);
++		val |= GPS_SYNC;
++		out_be32(&sniff_regs->aic_sniff_ctrl, val);
++		spin_unlock(&sniffer->lock);
++
++		for (i = 0; i < SYNC_WAIT; i++) {
++			val = in_be32(&sniff_regs->aic_sniff_ctrl);
++			if (!(val & GPS_SYNC)) {
++				dev_info(dev, "%s:sniffer: GPS_SYNC cleared\n",
++						rf_dev->name);
++				break;
++			}
++			mdelay(100);
++		}
++
++		spin_lock(&sniffer->lock);
++		val = in_be32(&sniff_regs->aic_sniff_ctrl);
++		if (val & GPS_SYNC) {
++			dev_err(dev, "%s:sniffer: GPS_SYNC did not clear\n",
++				rf_dev->name);
++			rc = -EAGAIN;
++			spin_unlock(&sniffer->lock);
++			goto out;
++		}
++
++		sniffer->gps_synced = 1;
++		val |= REFCNT_EN;
++		out_be32(&sniff_regs->aic_sniff_ctrl, val);
++		spin_unlock(&sniffer->lock);
++	}
++
++	if (rf_dev->data_chans_enabled) {
++		/* Enable Receive DMA */
++		val = in_be32(&lane->regs->aic_dma_dcr);
++		val |= RIQE;
++		out_be32(&lane->regs->aic_dma_dcr, val);
++
++		mdelay(1);
++		/* start capture*/
++		spin_lock(&sniffer->lock);
++		val = in_be32(&sniff_regs->aic_sniff_ctrl);
++		val |= CAP_EN;
++		out_be32(&sniff_regs->aic_sniff_ctrl, val);
++		spin_unlock(&sniffer->lock);
++		stats->prev_disp = in_be32(&lane->regs->aic_dma_riqbdr);
++	}
++
++out:
++	return rc;
++}
++
++int aic_init_sniff_regs(struct aic_sniffer *sniffer,
++	       struct rf_sniff_params *sniff_params)
++{
++	struct aic_sniff_regs  *sniff_regs = sniffer->regs;
++	struct rf_init_params  *dev_params = &sniff_params->dev_params;
++	struct aic_lane *lane = sniffer->lane;
++	u32 val;
++
++	spin_lock(&sniffer->lock);
++
++	val = in_be32(&sniff_regs->aic_sniff_ctrl);
++	val &= ~(REF_SEL_MASK | CHP_SEL_MASK);
++
++	if (lane->type == AIC_LANE_ADI) {
++		val |= REF_SEL_ADI;
++		val |= (lane->id << CHP_SEL_SHIFT);
++	} else if (lane->type == AIC_LANE_MAXIM) {
++		val |= (REF_SEL_MAXPHY | CHP_SEL_MAXPHY);
++	}
++	val |= REFCNT_EN;
++
++	out_be32(&sniff_regs->aic_sniff_ctrl, val);
++
++	if (!lane->rf_dev->data_chans_enabled) {
++		spin_unlock(&sniffer->lock);
++		goto out;
++	}
++
++	val = DEFAULT_ROLLOVER;
++	out_be32(&sniff_regs->aic_sniff_refcnt, val);
++
++	val = in_be32(&sniff_regs->aic_sniff_ctrl);
++	val |= PRE_CAP_EN;
++	out_be32(&sniff_regs->aic_sniff_ctrl, val);
++
++	/* default capture offset is programmed as 0 */
++	val = DEFAULT_CAPT_OFF;
++	out_be32(&sniff_regs->aic_sniff_capt_off, val);
++
++	/* Set capture duration according to user space value
++	 * (user space value is in number of subframes).
++	 * capt_dur should be programmed in number of chips
++	 */
++
++	sniffer->capt_dur_frms = sniff_params->capture_duration;
++	val = sniff_params->capture_duration *
++		lane->rf_dev->dev_params.chips_per_slot *
++		lane->rf_dev->dev_params.slots_per_subfrm;
++
++	out_be32(&sniff_regs->aic_sniff_capt_dur, val);
++
++	/* Enable capture complete interrupt */
++	val = in_be32(&sniff_regs->aic_sniff_inten);
++	val |= CAP_INT_EN;
++	out_be32(&sniff_regs->aic_sniff_inten, val);
++
++	sniffer->capture_done = 0;
++	if ((dev_params->tx_rxmode == TXRX_2T2R) ||
++		(dev_params->tx_rxmode == TXRX_1T2R)) {
++		/*Set rx_dma_done_mask for ant 0 and 1*/
++		lane->rx_dma_done_mask = (AIC_DMA_DONE << 0) |
++						(AIC_DMA_DONE << 1);
++	} else {
++		/*Set rx_dma_done_mask for ant 0 */
++		lane->rx_dma_done_mask = (AIC_DMA_DONE << 0);
++	}
++	spin_unlock(&sniffer->lock);
++	udelay(150);
++out:
++	return 0;
++}
++
++int aic_init_sniffer(struct aic_sniffer *sniffer,
++		struct rf_sniff_params *sniff_params)
++{
++	struct aic_lane *lane = sniffer->lane;
++	struct aic_lane_regs *lane_regs;
++	struct device *dev;
++	struct aic_common_regs *common_regs;
++	struct aic_dev *aic;
++	struct rf_ctrl_dev *rf_dev;
++	struct rf_dev_params *params;
++	u32 val, sniffer_connectivity;
++	int rc = 0;
++
++	if (!lane)
++		return -EINVAL;
++
++	aic = lane->aic;
++	dev = aic->dev;
++	common_regs = aic->regs;
++	lane_regs = lane->regs;
++	rf_dev = lane->rf_dev;
++	params = &rf_dev->dev_params;
++
++	rc = aic_adilane_init(lane, &sniff_params->dev_params);
++	if (rc)
++		return rc;
++
++	spin_lock(&aic->lock);
++	/*Connect Sniffer to Lane*/
++	val = in_be32(&common_regs->aic_interconnect);
++	sniffer_connectivity = 1 << lane->id;
++
++	if (sniffer->id == 1)
++		val |= sniffer_connectivity;
++	else if (sniffer->id == 0)
++		val &= ~sniffer_connectivity;
++	else {
++		dev_err(dev, "sniffer id seems to be wrong %d\n", sniffer->id);
++		rc = -EINVAL;
++		goto out;
++	}
++
++	if ((aic->sniff_timing_src != RF_PPS_SRC_END) &&
++		(aic->sniff_timing_src != sniff_params->timing_src)) {
++
++		dev_err(dev, "sniffer GPS pulse is common for both sniffers\n");
++		dev_err(dev, "Currently active sniffer timing src %d,\
++			can not change it to %d\n", aic->sniff_timing_src,
++				sniff_params->timing_src);
++		rc = -EINVAL;
++		goto out;
++	}
++
++	switch (sniff_params->timing_src) {
++	case RF_PPS_SRC_GPS:
++	case RF_PPS_SRC_PTP:
++		val |= GPS_SNIFF_GPS_ETSEC_PULSE;
++		break;
++	case RF_PPS_SRC_RAW_GPS:
++		val |= GPS_SNIFF_GPS_PPS_REFCLK_IN;
++		break;
++	default:
++		dev_err(dev, "Invalid time sync src [%x]for sniffer %d\n",
++				sniff_params->timing_src, sniffer->id);
++		rc = -EINVAL;
++		goto out;
++	}
++	aic->sniff_timing_src = sniff_params->timing_src;
++	out_be32(&common_regs->aic_interconnect, val);
++	spin_unlock(&aic->lock);
++
++	if (lane->rf_dev->data_chans_enabled) {
++		/* Disable uplink and downlink of AIC */
++		val = in_be32(&lane_regs->aic_netw_conf1);
++		val &= ~(DL_EN | UL_EN);
++		out_be32(&lane_regs->aic_netw_conf1, val);
++		mdelay(2);
++
++		val = in_be32(&lane_regs->aic_dma_dmsr);
++		val |= (RXENSEL_SNIFFER | RXNOACK);
++
++		/* Set number of receive antennas */
++		if (sniff_params->dev_params.tx_rxmode == TXRX_2T2R ||
++			sniff_params->dev_params.tx_rxmode == TXRX_1T2R)
++			val |= RNA_2ANT;
++		else
++			val &= ~RNA_2ANT;
++		out_be32(&lane_regs->aic_dma_dmsr, val);
++
++		/* Set Receive IQ Threshold as 1 sub frame in bytes
++		 * and 1 chip = 4B */
++		val = params->chips_per_slot * params->slots_per_subfrm * 4;
++		out_be32(&lane_regs->aic_dma_riqt, val);
++
++		spin_lock(&aic->lock);
++		/* Enable PPC sniff capt done interrupt */
++		val = in_be32(&common_regs->ppc_interrupt_ctrl_reg);
++		if (sniffer->id == 0)
++			val |= IE_PPC_SNIFF0_CAPT_DONE_INT;
++		else if (sniffer->id == 1)
++			val |= IE_PPC_SNIFF1_CAPT_DONE_INT;
++		out_be32(&common_regs->ppc_interrupt_ctrl_reg, val);
++		spin_unlock(&aic->lock);
++	}
++	rc = aic_init_sniff_regs(sniffer, sniff_params);
++
++	sniffer->intialized = 1;
++	return rc;
++out:
++	spin_unlock(&aic->lock);
++	return rc;
++}
++
++static int aic_config_sniff(struct rf_ctrl_dev *rf_dev,
++		struct rf_sniff_params *sniff_params)
++{
++	struct aic_lane *lane = rf_dev->priv;
++	struct device *dev = lane->aic->dev;
++	int rc = 0;
++
++	/* Get us a sniffer if we don't have one */
++	if (!lane->sniffer) {
++		if (!aic_get_sniffer(lane)) {
++			dev_err(dev, "Could not get sniffer for Lane %d\n",
++			lane->id);
++			rc = -EBUSY;
++			goto out;
++		}
++	}
++
++	if (sniff_params->dev_params.capture_enabled)
++		rf_dev->data_chans_enabled = 1;
++
++	/* We intialize RF timer also with same parameters as sniff
++	 * If RF timer has never been intialized before this
++	 * config_sniff request. Otherwise we don't touch RF timer
++	 * again, because user space is free to intialize RF timer
++	 * and sniffer differently
++	 */
++	if (rf_dev->old_state != RF_INITIALIZED) {
++		rc = aic_init(rf_dev, &sniff_params->dev_params);
++		if (rc) {
++			dev_err(dev, "sniff: Failed to init aic lane, err %d",
++					rc);
++			goto out;
++		}
++	}
++
++	rc = aic_init_sniffer(lane->sniffer, sniff_params);
++	if (rc)
++		goto out;
++
++	return rc;
++out:
++	if (lane->sniffer)
++		aic_free_sniffer(lane->sniffer);
++
++	rf_dev->data_chans_enabled = 0;
++	return rc;
++}
++
++static int aic_probe(struct of_device *ofdev,
++		const struct of_device_id *match)
++{
++	int rc = 0, *lane_id, i;
++	struct device_node *np = ofdev->node, *np1;
++	struct device *dev = &ofdev->dev;
++	struct device_node *child = NULL;
++	struct rf_ctrl_dev *rf_dev;
++	struct aic_lane *lane;
++	static struct aic_dev *aic_dev;
++	struct aic_sniffer *sniffer;
++	void *regs;
++	u32 *gcr_reg;
++
++	if (!np || !of_device_is_available(np))
++		return -ENODEV;
++
++	aic_dev = kzalloc(sizeof(struct aic_dev), GFP_KERNEL);
++	if (!aic_dev) {
++		dev_dbg(dev, "Failed to allocate aic_dev\n");
++		return -ENOMEM;
++	}
++	aic_dev->dev = dev;
++	spin_lock_init(&aic_dev->lock);
++	aic_dev->regs = of_iomap(np, 0);
++	if (!aic_dev->regs) {
++		dev_dbg(dev, "aic: aic_dev iomap failed\n");
++		rc = -ENOMEM;
++		goto out;
++	}
++
++	aic_dev->sniff_irq = irq_of_parse_and_map(np, 0);
++	aic_dev->dsp_general_irq = irq_of_parse_and_map(np, 1);
++
++	rc = request_irq(aic_dev->sniff_irq, aic_sniffer_isr, 0,
++				"rf_sniff", aic_dev);
++	if (rc) {
++		dev_dbg(dev, "sniffer request_irq failed lane \n");
++		goto out;
++	}
++
++	rc = request_irq(aic_dev->dsp_general_irq, aic_dsp_gen_isr,
++			0, "dsp_general", aic_dev);
++	if (rc) {
++		dev_dbg(dev, "dma_general request_irq failed lane \n");
++		goto out;
++	}
++
++	np1 = of_find_compatible_node(NULL, NULL, "fsl,gcr");
++	if (!np1) {
++		rc = -ENODEV;
++		goto out;
++	}
++	gcr_reg = of_iomap(np1, 0);
++	aic_dev->gir_ant_en_mpic = (u32 *)(((u32)gcr_reg) +
++				GIR_ANT_EN_MPIC_OFFSET);
++	aic_dev->gir_ant = (u32 *)(((u32)gcr_reg) + GIR_ANT_OFFSET);
++
++	/* By default dsp general interrupt should be disabled */
++	out_be32(aic_dev->gir_ant_en_mpic, 0);
++
++	for_each_child_of_node(np, child) {
++
++		lane_id = (int *) of_get_property(child, "lane_id", NULL);
++
++		if (!lane_id)
++			continue;
++
++		regs = of_iomap(child, 0);
++		if (!regs) {
++			dev_dbg(dev, "aic:[%d] iomap failed, \n", *lane_id);
++			continue;
++		}
++		rf_dev = allocate_rf_ctrl_dev(sizeof(struct aic_lane),
++					GFP_KERNEL);
++		if (!rf_dev) {
++			dev_dbg(dev, "aic:[%d] rf_dev allocation failure\n",
++					*lane_id);
++			continue;
++		}
++		lane = (struct aic_lane *) rf_dev->priv;
++
++		lane->aic = aic_dev;
++		lane->id = *lane_id;
++		lane->regs = regs;
++		lane->irq = irq_of_parse_and_map(child, 0);
++		spin_lock_init(&lane->lock);
++		if ((lane->id == 0) || (lane->id == 1) || (lane->id == 2))
++			lane->type = AIC_LANE_ADI;
++
++		if ((lane->id == 3) || (lane->id == 4) || (lane->id == 5))
++			lane->type = AIC_LANE_MAXIM;
++
++		rf_dev->phy_id = (u32) of_parse_phandle(child,
++						"rfphy-handle", 0);
++		lane->rf_dev = rf_dev;
++		rf_dev->ops = &aic_rfops;
++		rf_dev->mode = MASTER;
++		rc = register_rf_ctrl_dev(rf_dev);
++		if (rc) {
++			dev_dbg(dev, "rf_dev registration failed, lane %d\n",
++					lane->id);
++			continue;
++		}
++		rc = request_irq(lane->irq, aic_isr, IRQF_NODELAY,
++				rf_dev->name, lane);
++		if (rc) {
++			dev_dbg(dev, "request_irq failed lane %d\n",
++					lane->id);
++			continue;
++		}
++
++		aic_dev->lanes[lane->id] = lane;
++	}
++
++	for (i = 0; i < AIC_NUM_SNIFFER_BLKS; i++) {
++
++		sniffer = &aic_dev->sniffers[i];
++		sniffer->id = i;
++		sniffer->lane = NULL;
++		regs = (void *) ((u32) &aic_dev->regs->aic_sniff0_refcnt +
++				(i * sizeof(struct aic_sniff_regs)));
++		sniffer->regs = (struct aic_sniff_regs *) regs;
++		atomic_set(&sniffer->in_use, 0);
++		spin_lock_init(&sniffer->lock);
++	}
++
++	dev_set_drvdata(dev, aic_dev);
++
++	/*Make sure all interrupts are gated*/
++	out_be32(&aic_dev->regs->ppc_interrupt_ctrl_reg, 0);
++	aic_dev->sniff_timing_src = RF_PPS_SRC_END;
++	atomic_set(&aic_dev->sniffers_in_use, 0);
++
++	return rc;
++out:
++	kfree(aic_dev);
++	return rc;
++}
++
++static int aic_remove(struct of_device *ofdev)
++{
++	struct aic_dev *aic_dev;
++	struct aic_lane *lane;
++	int i, rc = 0;
++
++	aic_dev = dev_get_drvdata(&ofdev->dev);
++	for (i = 0; i < MAX_LANE_COUNT; i++) {
++		lane = aic_dev->lanes[i];
++		rc = unregister_rf_ctrl_dev(lane->rf_dev);
++		if (rc)
++			return -EBUSY;
++
++		free_irq(lane->irq, lane);
++		rc = free_rf_ctrl_dev(lane->rf_dev);
++	}
++	if (rc)
++		return -EBUSY;
++
++	free_irq(aic_dev->sniff_irq, lane);
++	kfree(aic_dev);
++
++	return 0;
++}
++
++static struct of_device_id aic_match[] = {
++	{
++		.compatible = "fsl,aic",
++	},
++	{},
++};
++MODULE_DEVICE_TABLE(of, aic_match);
++
++static struct of_platform_driver aic_driver = {
++	.name = "fsl-aic",
++	.match_table = aic_match,
++	.probe = aic_probe,
++	.remove = aic_remove
++};
++
++static int __init aic_mod_init(void)
++{
++	return of_register_platform_driver(&aic_driver);
++}
++
++static void __exit aic_exit(void)
++{
++	of_unregister_platform_driver(&aic_driver);
++}
++
++module_init(aic_mod_init);
++module_exit(aic_exit);
+diff --git a/drivers/rf/controllers/fsl_aic.h b/drivers/rf/controllers/fsl_aic.h
+new file mode 100644
+index 0000000..aec29c0
+--- /dev/null
++++ b/drivers/rf/controllers/fsl_aic.h
+@@ -0,0 +1,452 @@
++/*
++ * drivers/rf/controllers/fsl_aic.h
++ * Freescale AIC (Antenna Controller Interface) driver
++ *
++ * AIC is the antenna interface controller found in bsc913x
++ * family of SOCs. It supports NCDMA, WCDMA-FDD, LTE-FDD, LTE-TDD
++ * and GSM-SNIFF network modes. AIC has 6 lanes on which RFICs
++ * can be connected. And AIC supports 4 RFICs working simultaneously.
++ * This driver provides only configuration path for all other modes
++ * except SNIFF because data from RFIC through AIC goes directly
++ * to a hardware accelerator from where it is taken out by DSP core
++ * in bsc913x.
++ *
++ * Author: pankaj chauhan <pankaj.chauhan@freescale.com>
++ *
++ * Copyright 2011-2013 Freescale Semiconductor, Inc.
++ *
++ * This program is free software; you can redistribute  it and/or modify it
++ * under  the terms of  the GNU General  Public License as published by the
++ * Free Software Foundation;  either version 2 of the  License, or (at your
++ * option) any later version.
++ */
++
++#ifndef __FSL_AIC_H__
++#define __FSL_AIC_H__
++
++#include <linux/kernel.h>
++#include <linux/types.h>
++#include <linux/device.h>
++#include <linux/spinlock.h>
++
++struct aic_common_regs {
++
++	u32	aic_ip_version;
++	u32	aic_interconnect;
++	u32	pll_cntl_0;
++	u32	pll_cntl_1;
++	u32	aic_sniff0_refcnt;
++	u32	aic_sniff0_refcnt_off;
++	u32	aic_sniff0_capt_off;
++	u32	aic_sniff0_capt_dur;
++	u32	aic_sniff_bcar;
++	u32	aic_sniff_bcbr;
++	u32	aic_sniff_brm_cntrl;
++	u32	aic_sniff0_cntrl;
++	u32	aic_sniff0_inten;
++	u32	aic_sniff0_int_stat;
++	u32	aic_sniff0_refcnt_val;
++	u32	aic_sniff0_frmint;
++	u32	reserved[6];
++	u32	aic_sniff1_refcnt;
++	u32	aic_sniff1_refcnt_off;
++	u32	aic_sniff1_capt_off;
++	u32	aic_sniff1_capt_dur;
++	u32	reserved1[3];
++	u32	aic_sniff1_cntrl;
++	u32	aic_sniff1_inten;
++	u32	aic_sniff1_int_stat;
++	u32	aic_sniff1_refcnt_val;
++	u32	aic_sniff1_frmint;
++	u32	reserved2[52];
++	u32	maxim_rxcntl;
++	u32	maxim_cntl;
++	u32	maxim_rssi;
++	u32	maxim_txcoeff_0_1;
++	u32	maxim_txcoeff_2_3;
++	u32	maxim_txcoeff_4_5;
++	u32	maxim_txcoeff_6_7;
++	u32	maxim_txcoeff_8_9;
++	u32	maxim_txcoeff_10_11;
++	u32	maxim_txcoeff_12_13;
++	u32	maxim_txcoeff_14_15;
++	u32	maxim_txcoeff_16_17;
++	u32	maxim_status;
++	u32	maxim_dlfrac_delay;
++	u32	maxim_spi_rxgain_1;
++	u32	maxim_spi_rxgain_2;
++	u32	reserved3[6];
++	u32	jesd0_cntl;
++	u32	jesd0_status;
++	u32	jesd1_cntl;
++	u32	jesd1_status;
++	u32	jesd2_cntl;
++	u32	jesd2_status;
++	u32	aic_tm_cntrl1;
++	u32	aic_interrupt_mux_ctrl_reg;
++	u32	jesd3_cntl;
++	u32	jesd3_status;
++	u32	reserved4[2];
++	u32	ppc_interrupt_ctrl_reg;
++	u32	ppc_interrupt_status_reg;
++	u32	dsp_lte_interrupt_ctrl_reg;
++	u32	dsp_lte_interrupt_status_reg;
++	u32	reserved5[4];
++};
++
++/*INTERCONNECT*/
++#define GPS_SNIFF_MASK			0x000000c0
++#define GPS_SNIFF_GPS_PPS_IN		0x00000000
++#define GPS_SNIFF_GPS_PPS_REFCLK_IN	0x00000040
++#define GPS_SNIFF_GPS_ETSEC_PULSE	0x00000080
++#define GPS_SNIFF_RESVD			0x000000c0
++#define AGC_STROBE_MASK			0x3
++#define AGC_STROBE_1_SHIFT		8
++#define AGC_STROBE_2_SHIFT		10
++#define AGC_STROBE_3_SHIFT		12
++#define AGC_STROBE_4_SHIFT		14
++
++/*JESDCNTL*/
++#define SINGLE_PORT		0x00000001
++#define HALF_DUPLEX		0x00000002
++#define SINGLE_DATA_RATE	0x00000004
++#define INVERT_CLK		0x00000020
++#define INVERT_RXFRAME		0x00000040
++#define RXF_NEGATIVE_EDGE_EN	0x00000400
++#define TXF_NEGATIVE_EDGE_EN	0x00000800
++#define RXF_TIMEOUT_EN		0x00010000
++#define ADI_MCLK_EN		0x00100000
++#define JESD_10BITS_WIDTH_EN	0x40000000
++#define JESD_MODE_EN		0x80000000
++#define	RDELAY_SHIFT		7
++#define RDELAY_MASK		(0x3 << RDELAY_SHIFT)
++#define RDELAY_0_CYCL		(0x0 << RXDATA_DELAY_SHIFT)
++#define RDELAY_1_by_2_CYCL	(0x1 << RXDATA_DELAY_SHIFT)
++#define RDELAY_1_CYCL		(0x2 << RXDATA_DELAY_SHIFT)
++#define RDELAY_3_by_2_CYCL	(0x3 << RXDATA_DELAY_SHIFT)
++#define TX_RX_MODE_SHIFT	3
++#define TXRX_MODE_MASK		(0x3 << TX_RX_MODE_SHIFT)
++#define TXRX_MODE_1T1R		(0x0 << TX_RX_MODE_SHIFT)
++#define TXRX_MODE_1T2R		(0x2 << TX_RX_MODE_SHIFT)
++#define TXRX_MODE_2T2R		(0x1 << TX_RX_MODE_SHIFT)
++
++/*AICTMCNTRL1*/
++/*These values will be shifted right
++ * by lane id before writing to AICTMCNTRL1
++ */
++#define TMCTRL_DL_EN	0x00100000
++#define TMCTRL_UL_EN	0x04000000
++
++/*PPC_INTERRUPT_CNTL_REG*/
++#define ADILANE0_DL_TTI		0x10
++#define ADILANE_DL_TTI_SHIFT	6
++#define IE_PPC_SNIFF0_CAPT_DONE_INT	0x04000000
++#define IE_PPC_SNIFF1_CAPT_DONE_INT	0x08000000
++
++/* PPC INTERRUPT STATUS REGISTER */
++#define PPC_ISR_SNIFF0_CAPT_DONE_INT	0x04000000
++#define PPC_ISR_SNIFF1_CAPT_DONE_INT	0x08000000
++
++struct aic_lane_regs {
++	u32	aic_dma_riqmts;
++	u32	aic_dma_tiqmts;
++	u32	aic_dma_riqmpl1;
++	u32	aic_dma_riqmpl23;
++	u32	aic_dma_tiqmpl1;
++	u32	aic_dma_tiqmpl23;
++	u32	aic_dma_mss;
++	u32	aic_dma_riqba0;
++	u32	aic_dma_riqba1;
++	u32	reserved[7];
++	u32	aic_dma_riqbs;
++	u32	aic_dma_rmba;
++	u32	aic_dma_rmbs;
++	u32	aic_dma_tiqba0;
++	u32	aic_dma_tiqba1;
++	u32	reserved1[8];
++	u32	aic_dma_tiqbs;
++	u32	aic_dma_dmsr;
++	u32	aic_dma_dcr;
++	u32	aic_dma_riqt;
++	u32	aic_dma_riqft;
++	u32	aic_dma_riqst;
++	u32	aic_dma_tiqt;
++	u32	aic_dma_tiqft;
++	u32	aic_dma_tiqst;
++	u32	aic_dma_ier;
++	u32	reserved2[19];
++	u32	aic_frame_conf;
++	u32	aic_netw_conf1;
++	u32	aic_netw_conf2;
++	u32	aic_netw_conf3;
++	u32	aic_dlul_delay;
++	u32	aic_lane_dlslot;
++	u32	aic_lane_ulslot;
++	u32	aic_lane_spslot;
++	u32	aic_lane_frame_count;
++	u32	aic_lane_tmctrl;
++	u32	reserved6[3];
++	u32	aic_symconf0;
++	u32	aic_symconf1;
++	u32	aic_symconf2;
++	u32	aic_symconf3;
++	u32	aic_symconf4;
++	u32	aic_symconf5;
++	u32	aic_symconf6;
++	u32	aic_symconf7;
++	u32	aic_int_pretime;
++	u32	aic_ref_framconf;
++	u32	aic_lane_frame_rollover;
++	u32	reserved3;
++	u32	aic_dma_isr;
++	u32	aic_dma_miar;
++	u32	aic_dma_dsr;
++	u32	aic_dma_riqbdr;
++	u32	aic_dma_tiqbdr;
++	u32	reserved4[4];
++	u32	rftimer_intr_ctrl;
++	u32	rftimer_isr;
++	u32	reserved5[34];
++};
++
++/*AICFRAMCONF*/
++#define SUBFRM_PER_FRM_SHIFT	21
++#define SUBFRM_PER_FRM_MASK	0x3f
++#define SLOT_PER_SUBFRM_SHIFT	15
++#define SLOT_PER_SUBFRM_MASK	0x3f
++#define CHIPS_PER_SLOT_SHIFT	0
++#define CHIPS_PER_SLOT_MASK	0x7fff
++
++/*AICNETWCONF*/
++#define TOTAL_LEN_SHIFT		16
++#define	TOTAL_LEN_MASK		0xffff
++#define SYM_PER_SLOT_SHIFT	0
++#define SYM_PER_SLOT_MASK	0xff
++#define PPS_TRIG_MASK		0x00003000
++#define PPS_TRIG_PPS		0x00000000
++#define PPS_TRIG_PTP		0x00001000
++#define PPS_TRIG_NLM		0x00002000
++#define PPS_TRIG_RAW_PPS	0x00003000
++#define DL_EN			0x00008000
++#define UL_EN			0x00004000
++
++/*AICNETWCONF2*/
++#define DWPTS_SHIFT		0
++#define DWPTS_MASK		0x7fff
++#define UPPTS_SHIFT		16
++#define UPPTS_MASK		0xfff
++
++/*AICNETWCONF3*/
++#define GP_SHIFT		0
++#define GP_MASK			0x7fff
++
++/*DLULDELAY*/
++#define DL_DELAY_SHIFT		16
++#define DL_DELAY_MASK		0xffff
++#define UL_DELAY_SHIFT		0
++#define UL_DELAY_MASK		0xffff
++
++/*AICLANETMCTRL*/
++#define GPS_EN			0x00000001
++#define SYNC_EN			0x00000002
++#define LTE_EN			0x00000004
++#define REFCLK_SEL		0x01000000
++#define AGC_STRB_SEL_MASK	0xc0000000
++#define AGC_STRB_SEL_SLOT	0x00000000
++#define AGC_STRB_SEL_TTI	0x40000000
++#define AGC_STRB_SEL_TTI_RLD	0x80000000
++#define AGC_STRB_SEL_NEXT_SYM	0xc0000000
++
++/* AICDMAnDMSR */
++#define RDD_UNI_SYS_MEM		0x00000000
++#define RDD_UNI_MAPLE		0x00000080
++#define RDD_MULTICAST		0x00000100
++#define RDD_MASK		0xfffffe7f
++#define DBL_BUF_MODE		0x00000200
++#define RX_OVERSAMPLING		0x00000020
++#define TNA_2ANT		0x00010000
++#define RNA_2ANT		0x00000001
++#define RSW_16B			0x00000010
++#define RSW_8B			0x00000000
++#define RXNOACK			0x00000008
++#define RDNSZ_TRUNC		0x00000400
++#define RXENSEL_SNIFFER		0x00000800
++#define TXNOACK			0x00080000
++#define TX_FLW_CTRL_DIS		0x00100000
++#define TDNSZ_TRUNC		0x04000000
++
++#define RIQBS_MASK		0x00ffffff
++#define RIQBA_MASK		0xfffffff0
++#define RIQT_MASK		0x00ffffff
++
++/* AICDMAnDCR */
++#define TIQE			0x00010000
++#define RIQE			0x00000001
++
++/* AICDMAnDSR */
++#define TIQS			0x00010000
++#define RIQS			0x00000001
++
++/* AICDMAnRIQMTS */
++#define RIQMTS_MASK		0x00000003
++#define RIQMTS_64B		0x00000000
++#define RIQMTS_128B		0x00000001
++#define RIQMTS_256B		0x00000002
++
++/* AICDMAnIER */
++#define ANT0_RIQTIE		0x00000001
++#define ANT1_RIQTIE		0x00000002
++#define RIQFTIE			0x00002000
++#define RIQSTIE			0x00004000
++#define RIQOIE			0x00008000
++#define ANT0_TIQTIE		0x00010000
++#define ANT1_TIQTIE		0x00020000
++#define TIQFTIE			0x20000000
++#define TIQSTIE			0x40000000
++#define TIQUIE			0x80000000
++
++/* AICDMAnISR */
++#define ANT0_RIQTI		0x00000001
++#define ANT1_RIQTI		0x00000002
++#define RIQFTI			0x00002000
++#define RIQSTI			0x00004000
++#define RIQOI			0x00008000
++#define ANT0_TIQTI		0x00010000
++#define ANT1_TIQTI		0x00020000
++#define TIQFTI			0x20000000
++#define TIQSTI			0x40000000
++#define TIQUI			0x80000000
++
++/*AICDMADSR*/
++#define RIQS			0x00000001
++#define TIQS			0x00010000
++
++#define RIQBDR_MASK		0xffffff
++
++/* CHIPRATE_REFCLK is chiprate in refclk terms, it is calculated as:
++ * chiprate_refclk = chips_per_slot * (REFCLK/SAMPLING_FREQUENCY)
++ *
++ * REFCLK - 19.2 Mhz
++ * chips_per_slot, and SAMPLING frequency changes with bandwidth
++ * and the ration remains same. so for all bandwidths chiprate_refclk
++ * remains constant
++ */
++#define CHIPRATE_REFCLK		9600
++#define CHIPRATE_REFCLK_WCDMA		1280
++
++/* Default rollover value is taken as 19200000
++ * so as to cover a period of 1 second */
++#define DEFAULT_ROLLOVER	19200000
++#define DEFAULT_CAPT_OFF		0
++
++#define MAX_LANE_COUNT		6
++#define LANE_REGDUMP_OFFSET	0x200
++#define SYNC_WAIT		20
++
++#define DEFAULT_DL_DELAY	0x15DC
++#define DEFAULT_UL_DELAY	0x15DC
++#define DEFAULT_WCDMA_DL_DELAY	0x14
++#define DEFAULT_WCDMA_UL_DELAY	0x8064
++
++#define AIC_NUM_SNIFFER_BLKS	2
++#define AIC_MAX_NUM_CHANNELS	2
++
++struct aic_sniff_regs {
++	u32 aic_sniff_refcnt;
++	u32 aic_sniff_refcnt_off;
++	u32 aic_sniff_capt_off;
++	u32 aic_sniff_capt_dur;
++	u32 reserved[3];
++	u32 aic_sniff_ctrl;
++	u32 aic_sniff_inten;
++	u32 aic_sniff_int_stat;
++	u32 aic_sniff_refcnt_val;
++	u32 aic_sniff_frmint;
++};
++
++/*SNIFFCTRL*/
++#define REF_SEL_MASK	0x00000003
++#define REF_SEL_ADI	0x00000000
++#define REF_SEL_MAXPHY	0x00000001
++#define REF_SEL_PREMUL	0x00000002
++#define CHP_SEL_MASK	0x0000000c
++#define CHP_SEL_SHIFT	2
++#define CHP_SEL_MAXPHY	0x0000000c
++#define REFCNT_EN	0x00000010
++#define	GPS_SYNC	0x00000020
++#define LD_OFF		0x00000040
++#define CAP_EN		0x00000080
++#define PRE_CAP_EN	0x00000100
++
++/* AICSNIFFnINTEN */
++#define CAP_INT_EN	0x00000001
++#define SNIF_FRMINT_EN	0x00000002
++
++/* AICSNIFFnINT_STAT */
++#define CAP_INT_STAT		0x00000001
++#define SNIF_FRMINT_STAT	0x00000002
++
++struct aic_sniffer {
++	struct aic_lane *lane;
++	atomic_t in_use;
++	unsigned int id;
++	unsigned int intialized;
++	unsigned int gps_synced;
++	unsigned int capt_dur_frms;
++	struct aic_sniff_regs *regs;
++	spinlock_t lock;
++	int capture_done;
++};
++
++struct aic_dev {
++	unsigned int sniff_irq;
++	unsigned int dsp_general_irq;
++	atomic_t sniffers_in_use;
++	enum rf_timer_src sniff_timing_src;
++	struct aic_common_regs *regs;
++	struct aic_lane *lanes[6];
++	struct aic_sniffer sniffers[2];
++	spinlock_t lock;		/*Protects aic_dev->regs*/
++	struct device *dev;
++	u32 *gir_ant_en_mpic;
++	u32 *gir_ant;
++};
++
++/* GIR_ANT_EN_MPIC */
++#define GIR_ANT_OFFSET		0x140
++#define GIR_ANT_EN_MPIC_OFFSET	0x144
++#define AIC_IRQ_ANT29			0x10000000
++
++#define DMA_STATUS_RETRIES	2
++
++struct aic_lane_stats {
++	u32 prev_disp;
++	int dl_tti_count;
++	int ul_tti_count;
++	int rx_ant0_frames;
++	int rx_ant1_frames;
++};
++
++enum aic_lane_type {
++	AIC_LANE_ADI,
++	AIC_LANE_MAXIM
++};
++struct aic_lane {
++	struct aic_dev *aic;
++	struct rf_ctrl_dev *rf_dev;
++	struct aic_sniffer *sniffer;
++	enum aic_lane_type type;
++	unsigned int id;
++	unsigned int irq;
++	struct aic_lane_regs *regs;
++	struct aic_lane_stats stats;
++	unsigned int num_chan;
++	u32	rx_dma_done;
++	u32	rx_dma_done_mask;
++	int rx_ant0_idx;
++	int rx_ant1_idx;
++	spinlock_t lock;		/*Protects aic_lane->regs*/
++};
++
++#define AIC_DMA_DONE	0x1
++#endif
+diff --git a/drivers/rf/core/Makefile b/drivers/rf/core/Makefile
+new file mode 100644
+index 0000000..f8ab6e8
+--- /dev/null
++++ b/drivers/rf/core/Makefile
+@@ -0,0 +1,2 @@
++
++obj-$(CONFIG_RFDEVICES)		+= rfdev.o rf_channel.o
+diff --git a/drivers/rf/core/rf_channel.c b/drivers/rf/core/rf_channel.c
+new file mode 100644
+index 0000000..eb23fc5
+--- /dev/null
++++ b/drivers/rf/core/rf_channel.c
+@@ -0,0 +1,207 @@
++/*
++ * drivers/rf/core/rf_channel.c
++ * RF Data Channel support
++ *
++ * RF data channels: Each RF device has per antenna RF
++ * data channel. An RF data channel is a full duplex channel
++ * (supports both Tx and RX), which supports Tx and Rx of IQ
++ * data to/from a RF device. Current Implementation only
++ * supports Rx/Tx data between rf device and user space but
++ * this framework can be extended to support in kernel users
++ * of IQ data as well.
++ *
++ * Author: pankaj chauhan <pankaj.chauhan@freescale.com>
++ *
++ * Copyright 2011-2013 Freescale Semiconductor, Inc.
++ *
++ * This program is free software; you can redistribute  it and/or modify it
++ * under  the terms of  the GNU General  Public License as published by the
++ * Free Software Foundation;  either version 2 of the  License, or (at your
++ * option) any later version.
++ */
++
++#include <linux/kernel.h>
++#include <linux/device.h>
++#include <linux/types.h>
++#include <linux/list.h>
++#include <linux/bitops.h>
++#include <linux/rfdev.h>
++#include <linux/rfdev_ioctl.h>
++#include <linux/rf_channel.h>
++
++int rf_channel_open(struct rf_ctrl_dev *rf_dev,
++	struct rf_channel_params *chan_params)
++{
++
++	struct rf_channel *chan;
++	struct rf_mmaped_bufs *bufs;
++	struct rf_ctrl_ops *ops;
++	int ant, rc = 0;
++
++	ant = chan_params->ant;
++	if (ant >= MAX_NUM_ANTENNAS) {
++		pr_err("%s: Ant[%d] invalid\n", rf_dev->name,
++			ant);
++		rc = -EINVAL;
++		goto out;
++	}
++	chan = rf_dev->channels[ant];
++	if (chan) {
++		pr_err("%s: Ant[%d] channel is already open\n", rf_dev->name,
++			ant);
++		rc = -EEXIST;
++		goto out;
++	}
++
++	chan = kzalloc(sizeof(struct rf_channel), GFP_KERNEL);
++	if (!chan) {
++		rc = -ENOMEM;
++		goto out;
++	}
++
++	raw_spin_lock_init(&chan->lock);
++	chan->ant = ant;
++	chan->dev = rf_dev;
++	chan->flags = chan_params->flags;
++	chan->tx_buf_size = chan_params->tx_buf_size;
++	chan->rx_buf_size = chan_params->rx_buf_size;
++
++	if (chan_params->flags & RF_CHAN_MMAPED) {
++		bufs = &chan->bufs.mmap_bufs;
++		/* We don't touch the buffers in kernel space
++		 * since we don't have any in kernel users of
++		 * channel, so virtual address of bufs is being
++		 * kept NULL. If we ever have users who can touch
++		 * channel buffer in kernel then an ioremap() is
++		 * required here.
++		 */
++		bufs->tx_base = 0;
++		bufs->rx_base = 0;
++		bufs->tx_base_phys = chan_params->tx_base_phys;
++		bufs->rx_base_phys = chan_params->rx_base_phys;
++		bufs->tx_curr_idx = 0;
++		bufs->rx_curr_idx = 0;
++	} else {
++		pr_err("%s: Only MMAPED channels are supported, flags %x\n",
++			rf_dev->name, chan_params->flags);
++		kfree(chan);
++		rc = -EINVAL;
++		goto out;
++	}
++
++	ops = rf_dev->ops;
++	rc = ops->channel_open(rf_dev, chan);
++	if (rc) {
++		pr_err("%s: Ant[%d] Ctrl dev failed to open channel\n",
++			rf_dev->name, ant);
++		kfree(chan);
++		goto out;
++	}
++
++	rf_dev->channels[ant] = chan;
++out:
++
++	return rc;
++}
++
++
++int rf_channel_close(struct rf_ctrl_dev *rf_dev, int ant)
++{
++	struct rf_ctrl_ops *ops = rf_dev->ops;
++	struct rf_channel *chan;
++	int rc = 0;
++
++	if (ant >= MAX_NUM_ANTENNAS) {
++		pr_err("%s: Ant[%d] invalid\n", rf_dev->name,
++			ant);
++		rc = -EINVAL;
++		goto out;
++	}
++	chan = rf_dev->channels[ant];
++
++	if (!chan)
++		goto out;
++
++	rc = ops->channel_close(rf_dev, chan);
++	if (rc) {
++		pr_err("%s: Ctrl dev failed to close chan %d\n",
++			rf_dev->name, ant);
++		goto out;
++	}
++
++	kfree(chan);
++	rf_dev->channels[ant] = NULL;
++
++out:
++	return rc;
++}
++
++
++int rf_rx_frame(struct rf_ctrl_dev *rf_dev, struct rf_frame *frame)
++{
++	struct rf_event_handler *event_handler;
++	struct rf_channel *chan;
++	struct rf_channel_stats *stats;
++	u16 evt;
++	int rc = 0;
++
++	chan = rf_dev->channels[frame->ant];
++
++	if (!(chan->flags & RF_CHAN_MMAPED)) {
++		rc = -ENOSYS;
++		pr_err("%s: Non MMAPED rx frame not supported\n",
++			rf_dev->name);
++		goto out;
++	}
++
++	stats = &chan->stats;
++	stats->rx_frame_count++;
++	spin_lock(&rf_dev->event_handler_lock);
++
++	list_for_each_entry(event_handler, &rf_dev->event_handler_list, list) {
++
++		if (event_handler->evt_mask & RF_EVT_RX_FRAME) {
++
++			evt = RF_MAKE_EVENT(RF_EVT_RX_FRAME, frame->ant,
++				frame->buf.buffer_idx);
++			rc = rf_send_event(rf_dev, event_handler, evt);
++			if (rc) {
++				pr_err("%s: Failed to send evt sig\n",
++					rf_dev->name);
++				break;
++			}
++		}
++	}
++
++	spin_unlock(&rf_dev->event_handler_lock);
++out:
++
++	return rc;
++}
++
++int rf_sniff_done(struct rf_ctrl_dev *rf_dev, int ant)
++{
++	struct rf_event_handler *event_handler;
++	u16 evt;
++	int rc = 0;
++
++	spin_lock(&rf_dev->event_handler_lock);
++	list_for_each_entry(event_handler, &rf_dev->event_handler_list, list) {
++
++		if (event_handler->evt_mask & RF_EVT_SNIFF_DONE) {
++
++			evt = RF_MAKE_EVENT(RF_EVT_SNIFF_DONE, ant, 0);
++			rc = rf_send_event(rf_dev, event_handler, evt);
++			if (rc) {
++				pr_err("%s: Failed to send evt sig\n",
++					rf_dev->name);
++				break;
++			}
++
++		}
++	}
++	spin_unlock(&rf_dev->event_handler_lock);
++
++	return rc;
++}
++
+diff --git a/drivers/rf/core/rfdev.c b/drivers/rf/core/rfdev.c
+new file mode 100644
+index 0000000..402521e
+--- /dev/null
++++ b/drivers/rf/core/rfdev.c
+@@ -0,0 +1,1249 @@
++/*
++ * drivers/rf/core.c
++ * RF device framework
++ *
++ * Radio interface device framework exposes the combination of a RF interface
++ * controller and RFIC as a RF device (eg. rf0, rf1) to user space for
++ * configuration. This interface is for RF PHYs for LTE/CDMA systems. RF
++ * interface controller driver and RFIC driver registers respective devices
++ * with this framework, and thier combination is exposed to user space as
++ * a unified rfdev interface 'rf0'.
++ *
++ * Author: pankaj chauhan <pankaj.chauhan@freescale.com>
++ *
++ * Copyright 2011-2013 Freescale Semiconductor, Inc.
++ *
++ * This program is free software; you can redistribute  it and/or modify it
++ * under  the terms of  the GNU General  Public License as published by the
++ * Free Software Foundation;  either version 2 of the  License, or (at your
++ * option) any later version.
++ */
++#include <linux/kernel.h>
++#include <linux/device.h>
++#include <linux/types.h>
++#include <linux/list.h>
++#include <linux/bitops.h>
++#include <linux/fs.h>
++#include <linux/rfdev.h>
++#include <linux/cdev.h>
++#include <linux/uaccess.h>
++#include <linux/signal.h>
++#include <linux/rfdev_ioctl.h>
++#include <linux/rf_channel.h>
++
++struct rf_priv {
++	struct list_head ctrl_list;
++	struct list_head phy_list;
++	spinlock_t phy_lock;
++	spinlock_t ctrl_lock;
++	unsigned long	name_idx_bitmap;
++	struct cdev cdev;
++	dev_t	dev;
++};
++
++static struct rf_priv *rf_priv;
++static int rf_change_state(struct rf_ctrl_dev *rf_dev, unsigned int state);
++static int rf_attach_phy(struct rf_ctrl_dev *rf_dev, struct rf_phy_dev *phy);
++static int rf_open(struct inode *inode, struct file *filep);
++static int rf_release(struct inode *inode, struct file *filep);
++static ssize_t rf_read(struct file *, char __user *, size_t, loff_t *);
++static int rf_ioctl(struct inode *, struct file *, unsigned int,
++		unsigned long);
++
++const static struct file_operations rf_fops = {
++	.open 	= rf_open,
++	.release = rf_release,
++	.read 	= rf_read,
++	.ioctl 	= rf_ioctl,
++};
++
++struct rf_ctrl_dev *allocate_rf_ctrl_dev(size_t priv_size,
++		unsigned long flags)
++{
++	struct rf_ctrl_dev *rf_dev;
++	size_t size;
++
++	size = sizeof(struct rf_ctrl_dev) + priv_size;
++	rf_dev = kzalloc(size, flags);
++
++	if (!rf_dev)
++		return rf_dev;
++
++	atomic_set(&rf_dev->ref, 1);
++	mutex_init(&rf_dev->lock);
++	init_swait_head(&rf_dev->wait_q);
++	INIT_LIST_HEAD(&rf_dev->event_handler_list);
++	spin_lock_init(&rf_dev->event_handler_lock);
++	rf_dev->priv = (unsigned char *) rf_dev + sizeof(struct rf_ctrl_dev);
++	rf_dev->dev_idx = ~0;
++
++	return rf_dev;
++}
++EXPORT_SYMBOL(allocate_rf_ctrl_dev);
++
++int free_rf_ctrl_dev(struct rf_ctrl_dev *rf_dev)
++{
++	struct rf_event_handler *evt_handler;
++	struct list_head *list, *next;
++
++	if (!atomic_dec_and_test(&rf_dev->ref))
++		return -EBUSY;
++
++	list_for_each_safe(list, next, &rf_dev->event_handler_list) {
++		evt_handler = list_entry(list, struct rf_event_handler, list);
++		kfree(evt_handler);
++	}
++
++	kfree(rf_dev);
++
++	return 0;
++}
++EXPORT_SYMBOL(free_rf_ctrl_dev);
++
++int register_rf_ctrl_dev(struct rf_ctrl_dev *rf_dev)
++{
++	struct rf_ctrl_ops *ctrl_ops;
++	unsigned int dev_idx;
++	unsigned long *devid_map;
++	int rc = 0;
++
++	ctrl_ops = rf_dev->ops;
++	if (!ctrl_ops || !ctrl_ops->init
++		|| !ctrl_ops->start || !ctrl_ops->stop)
++		return -EINVAL;
++
++	rf_dev->state = RF_CREATED;
++	spin_lock(&rf_priv->ctrl_lock);
++
++	devid_map = (unsigned long *)&rf_priv->name_idx_bitmap;
++	dev_idx = find_first_zero_bit(devid_map, 32);
++
++	set_bit(dev_idx, devid_map);
++	list_add_tail(&rf_dev->list, &rf_priv->ctrl_list);
++
++	spin_unlock(&rf_priv->ctrl_lock);
++	sprintf(&rf_dev->name[0], "rf%d", dev_idx);
++	rf_dev->dev_idx = dev_idx;
++	if (rf_attach_phy(rf_dev, NULL))
++		rc = rf_change_state(rf_dev, RF_PHY_ATTACHED);
++
++	return rc;
++}
++EXPORT_SYMBOL(register_rf_ctrl_dev);
++
++int unregister_rf_ctrl_dev(struct rf_ctrl_dev *rf_dev)
++{
++	struct rf_phy_dev *phy;
++	int rc = 0;
++
++	/* Notify PHY that we are going down */
++	phy = rf_dev->phy;
++
++	if (phy->ops->stop) {
++		rc = phy->ops->stop(phy);
++		if (rc) {
++			pr_debug("%s: unregister failed, phy busy\n",
++					rf_dev->name);
++			return -EBUSY;
++		}
++	}
++	rf_change_state(rf_dev, RF_DOWN);
++
++	spin_lock(&rf_priv->ctrl_lock);
++
++	clear_bit(rf_dev->dev_idx, &rf_priv->name_idx_bitmap);
++	list_del(&rf_dev->list);
++
++	spin_unlock(&rf_priv->ctrl_lock);
++
++	return rc;
++}
++EXPORT_SYMBOL(unregister_rf_ctrl_dev);
++
++struct rf_phy_dev *allocate_rf_phy_dev(size_t priv_size, unsigned long flags)
++{
++	struct rf_phy_dev *phy;
++	size_t size;
++
++	size = sizeof(struct rf_phy_dev) + priv_size;
++	phy = kzalloc(size, flags);
++	if (!phy)
++		return NULL;
++
++	phy->priv = ((unsigned char *) phy) + sizeof(struct rf_phy_dev);
++
++	return phy;
++}
++EXPORT_SYMBOL(allocate_rf_phy_dev);
++
++int free_rf_phy_dev(struct rf_phy_dev *phy)
++{
++	kfree(phy);
++
++	return 0;
++}
++EXPORT_SYMBOL(free_rf_phy_dev);
++
++int register_rf_phy_dev(struct rf_phy_dev *phy)
++{
++	struct rf_ctrl_dev *rf_ctrl_dev;
++	struct rf_phy_ops *phy_ops;
++
++	phy_ops = phy->ops;
++	if (!phy_ops || !phy_ops->init
++		|| !phy_ops->start || !phy_ops->stop)
++		return -EINVAL;
++
++	spin_lock(&rf_priv->phy_lock);
++
++	list_add_tail(&phy->list, &rf_priv->phy_list);
++
++	spin_unlock(&rf_priv->phy_lock);
++
++	if (rf_attach_phy(NULL, phy)) {
++		rf_ctrl_dev = phy->ctrl_dev;
++		rf_change_state(rf_ctrl_dev, RF_PHY_ATTACHED);
++	}
++
++	return 0;
++}
++EXPORT_SYMBOL(register_rf_phy_dev);
++
++int unregister_rf_phy_dev(struct rf_phy_dev *phy)
++{
++	struct rf_ctrl_dev *rf_dev;
++	int rc;
++
++	rf_dev = phy->ctrl_dev;
++	if (rf_dev->ops->phy_detach) {
++		rc = rf_dev->ops->phy_detach(rf_dev);
++		if (rc)
++			return -EBUSY;
++		rf_dev->phy = NULL;
++		rf_change_state(rf_dev, RF_DOWN);
++	}
++	spin_lock(&rf_priv->phy_lock);
++
++	list_del(&phy->list);
++
++	spin_unlock(&rf_priv->phy_lock);
++
++	return 0;
++}
++EXPORT_SYMBOL(unregister_rf_phy_dev);
++
++int rf_change_state(struct rf_ctrl_dev *rf_dev, unsigned int new_state)
++{
++	int err = 0;
++
++	/* Save old state, so that if any operation during
++	 * state change fails then we can go back to previous
++	 * state
++	 */
++	rf_dev->old_state = rf_dev->state;
++
++	switch (new_state) {
++
++	case RF_PHY_ATTACHED:
++		if (rf_dev->state != RF_CREATED) {
++			err = -EINVAL;
++			goto out;
++		}
++		break;
++
++	case RF_PHY_INITIALIZED:
++		if (rf_dev->state < RF_PHY_ATTACHED) {
++			err = -EINVAL;
++			goto out;
++		}
++		break;
++
++	case RF_INITIALIZED:
++	case RF_SNIFFING:
++		if (rf_dev->state < RF_PHY_INITIALIZED) {
++			err = -EINVAL;
++			goto out;
++		}
++		break;
++
++	case RF_READY:
++		if ((rf_dev->state < RF_INITIALIZED) ||
++			(rf_dev->state == RF_READY)) {
++			err = -EINVAL;
++			goto out;
++		}
++		break;
++	/* By default all other state changes are allowed */
++	case RF_CREATED:
++	case RF_TIMER_SYNC_AWAITED:
++	case RF_TIMER_SYNC_FAILED:
++	case RF_STOPPED:
++	case RF_DOWN:
++			/*Fall through*/
++	default:
++		break;
++	}
++
++	rf_dev->state = new_state;
++out:
++	return err;
++}
++
++int rf_attach_phy(struct rf_ctrl_dev *rf_dev, struct rf_phy_dev *phy)
++{
++	int match = 0;
++	struct rf_ctrl_dev *rf_dev_itr = NULL;
++	struct rf_phy_dev *phy_itr = NULL;
++
++	/* Search for a phy for given rf ctrl dev */
++	if (rf_dev) {
++		spin_lock(&rf_priv->phy_lock);
++
++		list_for_each_entry(phy_itr, &rf_priv->phy_list, list) {
++			if (rf_dev->phy_id == phy_itr->phy_id) {
++				match = 1;
++				rf_dev->phy = phy_itr;
++				phy_itr->ctrl_dev = rf_dev;
++				break;
++			}
++		}
++
++		spin_unlock(&rf_priv->phy_lock);
++		return match;
++	}
++
++	/* Search for a rf ctrl dev for a given phy */
++	if (phy) {
++		spin_lock(&rf_priv->ctrl_lock);
++
++		list_for_each_entry(rf_dev_itr, &rf_priv->ctrl_list, list) {
++			if (phy->phy_id == rf_dev_itr->phy_id) {
++				match = 1;
++				phy->ctrl_dev = rf_dev_itr;
++				rf_dev_itr->phy = phy;
++				break;
++			}
++		}
++
++		spin_unlock(&rf_priv->ctrl_lock);
++	}
++
++	return match;
++}
++
++int rf_notify_dl_tti(struct rf_ctrl_dev *rf_dev)
++{
++	struct rf_stats *stats;
++
++	stats = &rf_dev->stats;
++	stats->tti_count++;
++	swait_wake_all(&rf_dev->wait_q);
++
++	return 0;
++}
++
++static int rf_open(struct inode *inode, struct file *filep)
++{
++	int minor, match = 0;
++	struct rf_ctrl_dev *rf_dev = NULL;
++
++	minor = iminor(inode);
++	spin_lock(&rf_priv->ctrl_lock);
++
++	list_for_each_entry(rf_dev, &rf_priv->ctrl_list, list) {
++		if (rf_dev->dev_idx == minor) {
++			match = 1;
++			break;
++		}
++	}
++
++	spin_unlock(&rf_priv->ctrl_lock);
++	if (!match) {
++		return -ENODEV;
++	} else {
++		filep->private_data = rf_dev;
++		atomic_inc(&rf_dev->ref);
++	}
++
++	return 0;
++}
++
++int rf_release(struct inode *inode, struct file *filep)
++{
++	struct rf_ctrl_dev *rf_dev;
++
++	rf_dev = filep->private_data;
++	atomic_dec(&rf_dev->ref);
++
++	return 0;
++}
++static ssize_t rf_read(struct file *filep, char __user *buf, size_t size,
++			loff_t *offset)
++{
++	struct rf_ctrl_dev *rf_dev;
++	struct rf_stats *stats;
++	DEFINE_SWAITER(wait);
++	int rc;
++
++	rf_dev = filep->private_data;
++
++	if (rf_dev->state < RF_INITIALIZED) {
++		pr_err("%s: Not initialized for TTI\n", rf_dev->name);
++		rc = -EAGAIN;
++		goto out;
++	}
++
++	stats = &rf_dev->stats;
++
++	swait_prepare(&rf_dev->wait_q, &wait, TASK_INTERRUPTIBLE);
++	/*Now wait here, tti notificaion will wake us up*/
++	schedule();
++	swait_finish(&rf_dev->wait_q, &wait);
++
++	rc = put_user(stats->tti_count, (int *)buf);
++	if (!rc)
++		rc = sizeof(stats->tti_count);
++out:
++	return rc;
++}
++
++int rf_fill_dev_info(struct rf_ctrl_dev *rf_dev, struct rf_dev_info *dev_info)
++{
++	int i;
++	struct rf_phy_dev *phy;
++	struct rf_dev_params *dev_params;
++	struct rf_dev_sniffer *sniffer;
++
++	dev_params = &rf_dev->dev_params;
++
++	dev_info->state = rf_dev->state;
++
++	strncpy(dev_info->controller, rf_dev->name, RIF_NAME_SIZE);
++	if (rf_dev->state >= RF_PHY_ATTACHED) {
++		phy = rf_dev->phy;
++		strncpy(dev_info->phy, phy->name, RIF_NAME_SIZE);
++		for (i = 0; i < dev_params->ants; i++)
++			dev_info->tx_atten[i] = phy->tx_atten[i];
++		dev_info->dl_carrier_freq = phy->dl_carrier_freq;
++		dev_info->ul_carrier_freq = phy->ul_carrier_freq;
++	} else {
++		memset(dev_info->phy, 0, RIF_NAME_SIZE);
++	}
++
++	dev_info->net_mode = rf_dev->net_mode;
++	dev_info->tx_rxmode = rf_dev->tx_rxmode;
++	dev_info->bw = rf_dev->bw;
++	dev_info->timing_src = rf_dev->timing_src;
++
++	dev_info->ants = dev_params->ants;
++	dev_info->symbol_len = dev_params->symbol_len;
++	dev_info->long_cp = dev_params->long_cp;
++	dev_info->cp0_len = dev_params->cp0_len;
++	dev_info->cp1_len = dev_params->cp1_len;
++
++	dev_info->sniff_enabled = rf_dev->sniff_enabled;
++	dev_info->mode = rf_dev->mode;
++	if (rf_dev->rf_master)
++		dev_info->master_state = rf_dev->rf_master->state;
++
++	if (dev_info->sniff_enabled) {
++		sniffer = &rf_dev->sniffer;
++		dev_info->sniff_net_mode = sniffer->net_mode;
++		dev_info->sniff_tx_rxmode = sniffer->tx_rxmode;
++		dev_info->sniff_timing_src = sniffer->timing_src;
++		dev_info->sniff_bw = sniffer->bw;
++		dev_info->sniff_carrier_freq = sniffer->carrier_freq;
++	}
++
++	return 0;
++}
++
++void rf_sniffer_enabled(struct rf_ctrl_dev *rf_dev,
++	struct rf_sniff_params *sniff_params)
++{
++	struct rf_dev_sniffer *sniffer = &rf_dev->sniffer;
++	struct rf_init_params *sniff_dev_params;
++
++	rf_dev->sniff_enabled = 1;
++	sniff_dev_params = &sniff_params->dev_params;
++	sniffer->net_mode = sniff_dev_params->mode;
++	sniffer->tx_rxmode = sniff_dev_params->tx_rxmode;
++	sniffer->timing_src = sniff_params->timing_src;
++	sniffer->bw = sniff_dev_params->bw;
++	sniffer->carrier_freq = sniff_params->carrier_freq;
++}
++
++void rf_sniffer_disabled(struct rf_ctrl_dev *rf_dev)
++{
++
++	rf_dev->sniff_enabled = 0;
++}
++
++int rf_send_event(struct rf_ctrl_dev *rf_dev,
++	struct rf_event_handler *evt_handler, u16 evt)
++{
++	struct task_struct *dst_task;
++	struct siginfo *siginfo = &evt_handler->siginfo;
++	int rc = 0;
++
++	dst_task = pid_task(evt_handler->pid, PIDTYPE_PID);
++	if (!dst_task) {
++		pr_err("%s: No listener task, Failed to send evt sig\n",
++			rf_dev->name);
++		goto out;
++	}
++	siginfo->si_int = evt;
++	rc = send_sig_info(siginfo->si_signo, siginfo, dst_task);
++	if (rc) {
++		pr_err("%s: Failed to send evt sig\n",
++			rf_dev->name);
++		goto out;
++	}
++
++out:
++	return rc;
++}
++
++int rf_register_event_handler(struct rf_ctrl_dev *rf_dev,
++	struct rf_event_listener *listener)
++{
++	struct rf_event_handler *evt_handler;
++	int rc = 0;
++
++	if (!(listener->evt_mask & RF_EVT_ALL)) {
++		pr_err("%s: Unkown event %x, registration failed\n",
++			rf_dev->name, listener->evt_mask);
++		rc = -EINVAL;
++		goto out;
++	}
++
++	evt_handler = kzalloc(sizeof(struct rf_event_handler), GFP_KERNEL);
++	if (!evt_handler) {
++		rc = -ENOMEM;
++		goto out;
++	}
++
++	evt_handler->evt_mask = listener->evt_mask;
++	evt_handler->pid = task_pid(current);
++	evt_handler->siginfo.si_signo = listener->signal;
++	evt_handler->siginfo.si_errno = 0;
++	evt_handler->siginfo.si_code = SI_QUEUE;
++	spin_lock(&rf_dev->event_handler_lock);
++	list_add_tail(&evt_handler->list,
++		&rf_dev->event_handler_list);
++	spin_unlock(&rf_dev->event_handler_lock);
++
++out:
++	return rc;
++}
++
++int rf_unregister_event_handler(struct rf_ctrl_dev *rf_dev,
++		enum rf_evt_del flag)
++{
++	struct rf_event_handler *evt_handler = NULL;
++	struct task_struct *listener_task;
++	struct list_head *list, *next;
++	int rc = 0, found_evt_handler = 0;
++
++	spin_lock(&rf_dev->event_handler_lock);
++
++	list_for_each_safe(list, next, &rf_dev->event_handler_list) {
++		evt_handler = list_entry(list, struct rf_event_handler, list);
++		listener_task = pid_task(evt_handler->pid, PIDTYPE_PID);
++		if (flag == DEL_ALL_EVT) {
++			list_del(&evt_handler->list);
++			kfree(evt_handler);
++			continue;
++		}
++		if (listener_task == current) {
++			list_del(&evt_handler->list);
++			found_evt_handler = 1;
++			break;
++		}
++	}
++	spin_unlock(&rf_dev->event_handler_lock);
++
++	if (found_evt_handler)
++		kfree(evt_handler);
++
++	return rc;
++}
++
++static int rf_init_master_slave(struct rf_ctrl_dev *rf_dev,
++	struct rf_phy_dev *phy)
++{
++	int rc = 0;
++	unsigned int lane_id;
++
++	lane_id = aic_get_lane_id(rf_dev);
++
++	if (rf_dev->mode == SLAVE) {
++		if (rf_dev->rf_master) {
++			if (rf_dev->rf_master->state != RF_READY) {
++				pr_err("Master of %s is not in READY"
++					" state\n", rf_dev->name);
++				rc = -EFAULT;
++				goto out;
++			}
++		} else {
++			pr_err("Master of %s is not initialized\n",
++				rf_dev->name);
++			rc = -EFAULT;
++			goto out;
++		}
++	}
++
++	rc = phy->ops->config_master_slave(lane_id, phy,
++					rf_dev->mode);
++	if (rc)
++		goto out;
++
++out:
++	return rc;
++}
++
++static int rf_ioctl(struct inode *inode, struct file *filep,
++		unsigned int cmd, unsigned long arg)
++{
++	struct rf_ctrl_dev *rf_dev;
++	struct rf_phy_dev *phy;
++	struct rf_init_params init_params;
++	struct rif_phy_cmd_set cmd_set;
++	struct rif_reg_buf reg_buf;
++	struct rif_write_reg_buf write_reg_buf;
++	struct rif_dac_params dac_params;
++	struct rif_dac_buf dac_buff;
++	struct rf_dev_info dev_info;
++	struct rf_tx_buf tx_buf;
++	struct rf_tx_en_dis tx_en_dis;
++	struct rf_rssi rssi;
++	struct rf_rx_gain rx_gain;
++	struct rf_gain_ctrl gain_ctrl;
++	struct rf_sniff_params sniff_params;
++	struct rf_synth_table synth_table;
++	struct rf_channel_params chan_params;
++	struct rf_event_listener listener;
++	unsigned long long (*params_buf)[NUM_SYNTH_PARAMS];
++	u8 (*reg_vals_buf)[NUM_SYNTH_REGS];
++	u32	*buf;
++	u32 u32arg;
++	int rc = -ENOSYS, size;
++
++	rf_dev = filep->private_data;
++	phy = rf_dev->phy;
++
++	mutex_lock_interruptible(&rf_dev->lock);
++	switch (cmd) {
++
++	case RIF_DEV_INIT:
++
++		rc = rf_init_master_slave(rf_dev, phy);
++		if (rc)
++			goto out;
++
++		if (rf_change_state(rf_dev, RF_INITIALIZED)) {
++			rc = -EAGAIN;
++			goto out;
++		}
++		if (copy_from_user(&init_params,
++			(struct rf_init_params *)arg, sizeof(init_params))) {
++			rc = -EFAULT;
++			goto out;
++		}
++
++		if (phy) {
++			rc = phy->ops->init(phy, &init_params);
++			if (rc)
++				goto out;
++		}
++
++		rc = rf_dev->ops->init(rf_dev, &init_params);
++		break;
++
++	case RIF_CONFIG_SNIFF:
++
++		rc = rf_init_master_slave(rf_dev, phy);
++		if (rc)
++			goto out;
++
++		if (rf_change_state(rf_dev, RF_SNIFFING)) {
++			rc = -EAGAIN;
++			goto out;
++		}
++		if (copy_from_user(&sniff_params,
++			(struct rf_sniff_params *)arg, sizeof(sniff_params))) {
++			rc = -EFAULT;
++			goto out;
++		}
++
++		if (phy && phy->ops->config_sniff) {
++			rc = phy->ops->config_sniff(phy, &sniff_params);
++			if (rc)
++				goto out;
++		}
++		if (rf_dev->ops->config_sniff)
++			rc = rf_dev->ops->config_sniff(rf_dev, &sniff_params);
++		if (!rc)
++			rf_sniffer_enabled(rf_dev, &sniff_params);
++		break;
++
++	case RIF_SET_TIMER_SOURCE:
++
++		if (rf_dev->state < RF_PHY_INITIALIZED) {
++			rc = -EAGAIN;
++			goto out;
++		}
++
++		if (!get_user(u32arg, (int *)arg))
++			rc = rf_dev->ops->set_timing_source(rf_dev, u32arg);
++		else
++			rc = -EFAULT;
++		break;
++
++	case RIF_SET_TIMER_CORRECTION:
++
++		if (rf_dev->state < RF_PHY_ATTACHED) {
++			rc = -EAGAIN;
++			goto out;
++		}
++
++		if (!copy_from_user(&dac_params, (struct rif_dac_params *)arg,
++			sizeof(struct rif_dac_params))) {
++
++			if (phy && phy->ops->set_timer_correction) {
++				rc = phy->ops->set_timer_correction(phy,
++						&dac_params);
++			}
++		} else {
++			rc = -EFAULT;
++		}
++
++		break;
++
++	case RIF_GET_DAC_VALUE:
++
++		if (rf_dev->state < RF_PHY_ATTACHED) {
++			rc = -EAGAIN;
++			goto out;
++		}
++
++		if (!copy_from_user(&dac_buff, (struct rif_dac_buf *)arg,
++			sizeof(struct rif_dac_buf))) {
++
++			if (phy && phy->ops->read_dac_value) {
++				rc = phy->ops->read_dac_value(phy,
++					dac_buff.correction_type, &u32arg);
++			}
++			if (copy_to_user(dac_buff.buf, &u32arg, sizeof(u32arg)))
++				rc = -EFAULT;
++		} else {
++			rc = -EFAULT;
++		}
++
++		break;
++
++	case RIF_RUN_PHY_CMDS:
++
++		if (rf_change_state(rf_dev, RF_PHY_INITIALIZED)) {
++			rc = -EAGAIN;
++			goto out;
++		}
++
++		if (!phy || !phy->ops->run_cmds)
++			goto out;
++
++		rc = -EFAULT;
++		if (!copy_from_user(&cmd_set, (struct rif_phy_cmd_set *)arg,
++			sizeof(struct rif_phy_cmd_set))) {
++
++			size = sizeof(struct rif_phy_cmd) * cmd_set.count;
++			buf = kzalloc(size, GFP_KERNEL);
++			if (buf) {
++				if (!copy_from_user(buf,
++						(u32 *) cmd_set.cmds, size))
++					rc = phy->ops->run_cmds(phy,
++						(struct rif_phy_cmd *)buf,
++						cmd_set.count);
++				kfree(buf);
++			} else {
++				rc = -ENOMEM;
++			}
++		}
++		break;
++
++	case RIF_EN_DIS_TX:
++		if (rf_dev->state < RF_PHY_INITIALIZED) {
++			rc = -EAGAIN;
++			goto out;
++		}
++
++		if (!copy_from_user(&tx_en_dis, (struct rf_tx_en_dis *)arg,
++				sizeof(struct rf_tx_en_dis))) {
++			if (phy && phy->ops->en_dis_tx) {
++				rc = phy->ops->en_dis_tx(phy,
++						tx_en_dis.tx_if,
++						tx_en_dis.tx_cmd);
++			}
++		} else {
++			rc = -EFAULT;
++		}
++		break;
++
++	case RIF_READ_RSSI:
++
++		if (rf_dev->state < RF_PHY_INITIALIZED) {
++			rc = -EAGAIN;
++			goto out;
++		}
++		if (!copy_from_user(&rssi, (struct rf_rssi *)arg,
++			sizeof(struct rf_rssi))) {
++
++			if (phy && phy->ops->read_rssi)
++				rc = phy->ops->read_rssi(phy, &rssi);
++			if (!rc && copy_to_user((struct rf_rssi *)arg,
++						&rssi, sizeof(struct rf_rssi)))
++				rc = -EFAULT;
++		} else {
++			rc = -EFAULT;
++		}
++		break;
++
++	case RIF_READ_PHY_REGS:
++	case RIF_READ_CTRL_REGS:
++
++		if (rf_dev->state < RF_PHY_INITIALIZED) {
++			rc = -EAGAIN;
++			goto out;
++		}
++
++		if (!copy_from_user(&reg_buf, (struct rif_reg_buf *)arg,
++			sizeof(struct rif_reg_buf))) {
++
++			size = 4 * reg_buf.count;
++			buf = kzalloc(size, GFP_KERNEL);
++			if (!buf) {
++				rc = -ENOMEM;
++				goto out;
++			}
++			if (cmd == RIF_READ_PHY_REGS) {
++
++				if (phy && phy->ops->read_regs) {
++					rc = phy->ops->read_regs(phy,
++						reg_buf.addr,
++						reg_buf.count, buf);
++				}
++			} else if (cmd == RIF_READ_CTRL_REGS) {
++
++				if (rf_dev->ops->read_regs) {
++					rc = rf_dev->ops->read_regs(rf_dev,
++						reg_buf.addr,
++						reg_buf.count, buf);
++				}
++			}
++			if (copy_to_user((u32 *)reg_buf.buf,
++					buf, size))
++				rc = -EFAULT;
++			kfree(buf);
++		} else {
++			rc = -EFAULT;
++		}
++		break;
++
++	case RIF_WRITE_PHY_REGS:
++
++		if (rf_dev->state < RF_PHY_ATTACHED) {
++			rc = -EAGAIN;
++			goto out;
++		}
++
++		if (!copy_from_user(&write_reg_buf,
++			(struct rif_write_reg_buf *)arg,
++			sizeof(struct rif_write_reg_buf))) {
++
++			if (phy->ops->write_reg) {
++				rc = phy->ops->write_reg(phy,
++						write_reg_buf.addr,
++						write_reg_buf.data);
++			}
++		} else {
++			rc = -EFAULT;
++		}
++
++		break;
++
++	case RIF_WRITE_CTRL_REGS:
++
++		if (rf_dev->state < RF_PHY_INITIALIZED) {
++			rc = -EAGAIN;
++			goto out;
++		}
++
++		if (!copy_from_user(&write_reg_buf,
++			(struct rif_write_reg_buf *)arg,
++			sizeof(struct rif_write_reg_buf))) {
++
++			if (rf_dev->ops->write_reg) {
++				rc = rf_dev->ops->write_reg(rf_dev,
++						write_reg_buf.addr,
++						write_reg_buf.data);
++			}
++		} else {
++			rc = -EFAULT;
++		}
++
++		break;
++
++	case RIF_START:
++		if (rf_change_state(rf_dev, RF_READY)) {
++			rc = -EAGAIN;
++			goto out;
++		}
++		if (phy) {
++			rc = phy->ops->start(phy);
++			if (rc)
++				goto out;
++		}
++		rc = rf_dev->ops->start(rf_dev);
++		break;
++
++	case RIF_STOP:
++
++		if (rf_change_state(rf_dev, RF_STOPPED)) {
++			rc = -EAGAIN;
++			goto out;
++		}
++
++		rf_unregister_event_handler(rf_dev, DEL_ALL_EVT);
++
++		rc = rf_dev->ops->stop(rf_dev);
++		if (!rc && rf_dev->sniff_enabled)
++			rf_sniffer_disabled(rf_dev);
++
++		if (phy) {
++			rc = phy->ops->stop(phy);
++			if (rc)
++				goto out;
++		}
++		break;
++
++	case RIF_GET_DEV_INFO:
++		rc = rf_fill_dev_info(rf_dev, &dev_info);
++		if (copy_to_user((struct rf_dev_info *)arg,
++					&dev_info, sizeof(dev_info)))
++			rc = -EFAULT;
++		break;
++	case RIF_SET_TX_ATTEN:
++		if (rf_dev->state < RF_PHY_INITIALIZED) {
++			rc = -EAGAIN;
++			goto out;
++		}
++
++		if (!copy_from_user(&tx_buf, (struct rf_tx_buf *)arg,
++				sizeof(struct rf_tx_buf))) {
++			if (phy && phy->ops->set_tx_atten) {
++				rc = phy->ops->set_tx_atten(phy,
++						tx_buf.tx_if,
++						tx_buf.tx_atten);
++			}
++		} else {
++			rc = -EFAULT;
++		}
++		break;
++
++	case RIF_READ_RX_GAIN:
++
++		if (rf_dev->state < RF_INITIALIZED) {
++			rc = -EAGAIN;
++			goto out;
++		}
++		if (!copy_from_user(&rx_gain, (struct rf_rx_gain *)arg,
++			sizeof(struct rf_rx_gain))) {
++
++			if (phy && phy->ops->get_rx_gain)
++				rc = phy->ops->get_rx_gain(phy, &rx_gain);
++
++			if (!rc && copy_to_user((struct rf_rx_gain *)arg,
++						&rx_gain,
++						sizeof(struct rf_rx_gain)))
++				rc = -EFAULT;
++		} else {
++			rc = -EFAULT;
++		}
++		break;
++
++	case RIF_WRITE_RX_GAIN:
++
++		if (rf_dev->state < RF_INITIALIZED) {
++			rc = -EAGAIN;
++			goto out;
++		}
++		if (!copy_from_user(&rx_gain, (struct rf_rx_gain *)arg,
++			sizeof(struct rf_rx_gain))) {
++
++			if (phy && phy->ops->set_rx_gain)
++				rc = phy->ops->set_rx_gain(phy, &rx_gain);
++		} else {
++			rc = -EFAULT;
++		}
++		break;
++
++	case RIF_SET_GAIN_CTRL_MODE:
++
++		if (rf_dev->state < RF_INITIALIZED) {
++			rc = -EAGAIN;
++			goto out;
++		}
++		if (!copy_from_user(&gain_ctrl, (struct rf_gain_ctrl *)arg,
++			sizeof(struct rf_gain_ctrl))) {
++
++			if (phy && phy->ops->set_gain_ctrl_mode)
++				rc = phy->ops->set_gain_ctrl_mode(phy,
++						&gain_ctrl);
++		} else {
++			rc = -EFAULT;
++		}
++		break;
++
++	case RIF_INIT_SYNTH_TABLE:
++		if (rf_dev->state < RF_PHY_INITIALIZED) {
++			rc = -EAGAIN;
++			goto out;
++		}
++		if (!phy->ops->save_synth_table)
++			goto out;
++
++		if (!copy_from_user(&synth_table, (struct rf_synth_table *)arg,
++					sizeof(struct rf_synth_table))) {
++			size = sizeof(unsigned long long) *
++				NUM_SYNTH_PARAMS * synth_table.count;
++			params_buf = (unsigned long long (*)[NUM_SYNTH_PARAMS])
++					kzalloc(size, GFP_KERNEL);
++			rc = 0;
++			if (params_buf) {
++				if (copy_from_user(params_buf, (unsigned long
++					long *)synth_table.params, size))
++					rc = -EFAULT;
++			} else
++				rc = -ENOMEM;
++			if (rc) {
++				kfree(params_buf);
++				goto out;
++			}
++
++			size = sizeof(u8) * NUM_SYNTH_REGS * synth_table.count;
++			reg_vals_buf = (u8 (*)[NUM_SYNTH_REGS])kzalloc(size,
++					GFP_KERNEL);
++			if (reg_vals_buf) {
++				if (copy_from_user(reg_vals_buf, (u8 *)
++						synth_table.reg_vals, size))
++					rc = -EFAULT;
++			} else
++				rc = -ENOMEM;
++			if (rc) {
++				kfree(reg_vals_buf);
++				kfree(params_buf);
++				goto out;
++			}
++
++			synth_table.params = params_buf;
++			synth_table.reg_vals = reg_vals_buf;
++			rc = phy->ops->save_synth_table(phy, &synth_table);
++			kfree(params_buf);
++			kfree(reg_vals_buf);
++		} else {
++			rc = -EFAULT;
++		}
++		break;
++
++	case RIF_CHANNEL_OPEN:
++		if (rf_dev->state < RF_PHY_INITIALIZED) {
++			rc = -EINVAL;
++			goto out;
++		}
++		if (copy_from_user(&chan_params,
++			(struct rf_chan_params *)arg, sizeof(chan_params))) {
++			rc = -EFAULT;
++			goto out;
++		}
++		rc = rf_channel_open(rf_dev, &chan_params);
++
++		break;
++
++	case RIF_CHANNEL_CLOSE:
++
++		if (!get_user(u32arg, (int *)arg))
++			rc = rf_channel_close(rf_dev, u32arg);
++		else
++			rc = -EFAULT;
++		break;
++
++	case RIF_REGISTER_EVENT:
++
++		if (copy_from_user(&listener, (struct rf_event_listener *)arg,
++			sizeof(listener))) {
++			rc = -EFAULT;
++			goto out;
++		}
++
++		rc = rf_register_event_handler(rf_dev, &listener);
++		break;
++
++	case RIF_UNREGISTER_EVENT:
++		rc = rf_unregister_event_handler(rf_dev, DEL_CUR_EVT);
++		break;
++
++	default:
++		rc = -ENOSYS;
++	}
++
++	if (!rc)
++		rf_dev->old_state = rf_dev->state;
++out:
++	if (rc)
++		rf_dev->state = rf_dev->old_state;
++	mutex_unlock(&rf_dev->lock);
++	return rc;
++}
++
++/*
++** Function: rf_mark_slave_mode()
++** Assign rfdev in SLAVE mode
++*/
++int rf_mark_slave_mode(int phy_id, struct rf_ctrl_dev *rf_dev)
++{
++	struct rf_ctrl_dev *rf_dev_itr;
++	int rc = -EINVAL;
++
++	spin_lock(&rf_priv->ctrl_lock);
++	list_for_each_entry(rf_dev_itr, &rf_priv->ctrl_list, list) {
++		if (phy_id == rf_dev_itr->phy_id) {
++			rf_dev_itr->rf_master = rf_dev;
++			rf_dev_itr->mode = SLAVE;
++			rc = 0;
++			break;
++		}
++	}
++	spin_unlock(&rf_priv->ctrl_lock);
++
++	return rc;
++}
++
++struct rf_ctrl_dev *rf_get_master_rfdev(u32 phy_id)
++{
++	struct rf_ctrl_dev *rf_dev = NULL;
++
++	spin_lock(&rf_priv->ctrl_lock);
++	list_for_each_entry(rf_dev, &rf_priv->ctrl_list, list) {
++		if (rf_dev->phy_id == phy_id)
++			break;
++	}
++	spin_unlock(&rf_priv->ctrl_lock);
++
++	return rf_dev;
++}
++
++/*
++** Function: rf_assign_lane_role()
++** map_buf[i].state contains the rfdev state
++** map_buf[i].phy_id contains the phy_id associated with rfdev
++**
++** This function iterates over list of rfdev having RF_PHY_ATTACHED state
++** and assign them as MASTER/SLAVE role.The first entry in map_buf[] will be
++** assigned MASTER state and the subsequent one's will be assigned as SLAVE
++*/
++int rf_assign_lane_role(struct rf_dev_lane_map *map_buf,
++			struct rf_priv *rf_priv)
++{
++	int i, master_flag = 0, rc = 0;
++	struct rf_ctrl_dev *rf_dev = NULL;
++
++	for (i = 0; i < RF_MAX_DEVS; i++) {
++		if (map_buf[i].state == RF_PHY_ATTACHED) {
++			if (!master_flag) {
++				master_flag = 1;
++				rf_dev = rf_get_master_rfdev(map_buf[i].
++							phy_id);
++				if (!rf_dev) {
++					rc = -EFAULT;
++					goto out;
++				}
++			} else {
++				rc = rf_mark_slave_mode(map_buf[i].
++						phy_id, rf_dev);
++			}
++		}
++	}
++
++out:
++	return rc;
++}
++
++/*
++** Function: rf_update_master_slave_status()
++** Mark rf lane status
++*/
++int rf_update_master_slave_status(void)
++{
++	int rc = 0;
++	unsigned int lane_id;
++	struct rf_ctrl_dev *rf_dev;
++	struct rf_dev_lane_map map_buf[RF_MAX_DEVS];
++
++	spin_lock(&rf_priv->ctrl_lock);
++
++	list_for_each_entry(rf_dev, &rf_priv->ctrl_list, list) {
++		if (rf_dev->state == RF_PHY_ATTACHED) {
++			lane_id = aic_get_lane_id(rf_dev);
++			map_buf[lane_id].phy_id = rf_dev->phy_id;
++			map_buf[lane_id].lane_id = lane_id;
++			map_buf[lane_id].state = RF_PHY_ATTACHED;
++		}
++	}
++
++	/* At this point we have list of rfdev's present in map_buf
++	 * having RF_PHY_ATTACHED state
++	 */
++	spin_unlock(&rf_priv->ctrl_lock);
++	rc = rf_assign_lane_role(map_buf, rf_priv);
++
++	return rc;
++}
++EXPORT_SYMBOL(rf_update_master_slave_status);
++
++static int __init rf_init(void)
++{
++	int rc;
++
++	rf_priv = kzalloc(sizeof(struct rf_priv), GFP_KERNEL);
++	if (!rf_priv) {
++		pr_debug("rfdev: Unable to allocate rf_priv\n");
++		return -ENOMEM;
++	}
++
++	rc = alloc_chrdev_region(&rf_priv->dev, 0, RF_MAX_DEVS, "rfdev");
++	if (rc) {
++		pr_debug("rfdev:Failed to register rf chardev,err %d\n",
++				rc);
++		return rc;
++	}
++
++	cdev_init(&rf_priv->cdev, &rf_fops);
++	cdev_add(&rf_priv->cdev, rf_priv->dev, RF_MAX_DEVS);
++	INIT_LIST_HEAD(&rf_priv->phy_list);
++	INIT_LIST_HEAD(&rf_priv->ctrl_list);
++
++	return 0;
++}
++
++static void __exit rf_cleanup(void)
++{
++	if (rf_priv) {
++		cdev_del(&rf_priv->cdev);
++		unregister_chrdev_region(rf_priv->dev, RF_MAX_DEVS);
++		kfree(rf_priv);
++	}
++}
++
++MODULE_LICENSE("GPL v2");
++module_init(rf_init);
++module_exit(rf_cleanup);
+diff --git a/drivers/rf/phy/Makefile b/drivers/rf/phy/Makefile
+new file mode 100644
+index 0000000..74fe010
+--- /dev/null
++++ b/drivers/rf/phy/Makefile
+@@ -0,0 +1,3 @@
++
++obj-$(CONFIG_ADI9361)		+= ad9361.o
++obj-y				+= tdd_int.o
+diff --git a/drivers/rf/phy/ad9361.c b/drivers/rf/phy/ad9361.c
+new file mode 100644
+index 0000000..21582f4
+--- /dev/null
++++ b/drivers/rf/phy/ad9361.c
+@@ -0,0 +1,1965 @@
++/*
++ *
++ * File: drivers/rf/phy/ad9361.c
++ *
++ * Freescale AD9361 Phy driver.
++ * AD9361 is a RF phy device connected to one of the AIC lane.
++ * Control path of AD9361 is through SPI interface whereas data path
++ * is through AIC. Its driver register it as a spi driver for the configuration
++ * of ad device via spi and also registers itself as rf_phy_dev that binds
++ * phy device to AIC lane, for data path(UL/DL).
++ *
++ * Author: Shaveta Leekha <shaveta@freescale.com>
++ *
++ * Copyright (C) 2011-2012 Freescale Semiconductor, Inc. All rights reserved.
++ *
++ * This program is free software; you can redistribute  it and/or modify it
++ * under  the terms of  the GNU General  Public License as published by the
++ * Free Software Foundation;  either version 2 of the  License, or (at your
++ * option) any later version.
++ *
++ * This program is distributed in the hope that it will be useful, but
++ * WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
++ * General Public License for more details.
++ *
++ */
++
++#include <linux/module.h>
++#include <linux/device.h>
++#include <linux/types.h>
++#include <linux/kernel.h>
++#include <linux/spi/spi.h>
++#include <linux/param.h>
++#include <linux/delay.h>
++#include <linux/of.h>
++#include <linux/io.h>
++#include <linux/of_gpio.h>
++#include <linux/gpio.h>
++#include <linux/rfdev.h>
++#include <linux/string.h>
++#include <linux/fsl_fpga.h>
++#include "ad9361.h"
++#include "tdd_int.h"
++
++#define DRV_DESC "FREESCALE DEVELOPED AD9361 PHY DRIVER"
++#define DRV_NAME "ad9361_phy"
++#define DEBUG
++
++int lna_table[] = {6, 17, 19, 25};
++int tia_table[] = {-6, 0};
++int mixer_table[] = {	0, 5, 11, 16,
++			17, 18, 19, 20,
++			21, 22, 23, 24,
++			25, 26,	27, 28};
++
++/* To check where reset gpio has been toggled to
++ * reset AD PHY device or not. */
++bool reset_status;
++
++MODULE_LICENSE("GPL v2");
++MODULE_DESCRIPTION(DRV_DESC);
++
++static int ad_phy_run_cmds(struct rf_phy_dev *ad_phy, struct rif_phy_cmd *cmds,
++		int count);
++static int ad_phy_read(struct rf_phy_dev *ad_phy, u32 start, u32 count,
++		u32 *buff);
++static int ad_phy_write(struct rf_phy_dev *ad_phy, u32 reg, u32 data);
++static int ad_set_tx_atten(struct rf_phy_dev *ad_phy, u32 tx_if, u32 tx_atten);
++static int ad_en_dis_tx(struct rf_phy_dev *ad_phy, u32 tx_if, u32 cmd);
++static int ad_en_dis_rx(struct rf_phy_dev *ad_phy, u32 rx_if, u32 rx_cmd);
++static int ad_read_rssi(struct rf_phy_dev *ad_phy, struct rf_rssi *rssi);
++static int ad_phy_dac_correction(struct rf_phy_dev *ad_phy,
++					struct rif_dac_params *params);
++static int ad_phy_get_dac_value(struct rf_phy_dev *ad_phy,
++					u32 correction_type, u32 *buff);
++static int ad_phy_start(struct rf_phy_dev *ad_phy);
++static int ad_init(struct rf_phy_dev *phy, struct rf_init_params *params);
++static int ad_phy_stop(struct rf_phy_dev *phy);
++static int ad_get_rx_gain(struct rf_phy_dev *ad_phy,
++		struct rf_rx_gain *rx_gain);
++static int ad_set_rx_gain(struct rf_phy_dev *ad_phy,
++		struct rf_rx_gain *rx_gain);
++static int ad_config_sniff(struct rf_phy_dev *ad_phy,
++		struct rf_sniff_params *sniff_params);
++static int ad_set_gain_ctrl_mode(struct rf_phy_dev *ad_phy,
++		struct rf_gain_ctrl *gain_ctrl);
++static int ad_set_band(struct rf_phy_dev *ad_phy, unsigned int band);
++static int ad_save_synth_table(struct rf_phy_dev *ad_phy,
++		struct rf_synth_table *synth_table);
++static int ad_config_master_slave(unsigned int lane_id,
++		struct rf_phy_dev *ad_phy, enum rf_lane_mode mode);
++
++static struct rf_phy_ops ad_phy_ops = {
++	.init = ad_init,
++	.set_timer_correction = ad_phy_dac_correction,
++	.read_dac_value = ad_phy_get_dac_value,
++	.run_cmds = ad_phy_run_cmds,
++	.read_regs = ad_phy_read,
++	.write_reg = ad_phy_write,
++	.set_tx_atten = ad_set_tx_atten,
++	.en_dis_tx = ad_en_dis_tx,
++	.read_rssi = ad_read_rssi,
++	.start = ad_phy_start,
++	.stop = ad_phy_stop,
++	.get_rx_gain = ad_get_rx_gain,
++	.set_rx_gain = ad_set_rx_gain,
++	.config_sniff = ad_config_sniff,
++	.set_gain_ctrl_mode = ad_set_gain_ctrl_mode,
++	.save_synth_table = ad_save_synth_table,
++	.config_master_slave = ad_config_master_slave,
++};
++
++
++u16 create_ad_phy_cmd(u16 reg, int opcode, int bytes_transfer)
++{
++	u16 cmd_word = 0;
++
++	switch (opcode) {
++	case SPI_WRITE:
++		cmd_word = OPCODE_WRITE
++			|(((bytes_transfer - 1) << SHIFT_BYTES_TRANSFER)
++						& (BYTES_TRANSFER_MASK))
++			| (reg & REG_ADDRESS_MASK);
++		break;
++
++	case SPI_READ:
++		cmd_word = OPCODE_READ
++			|(((bytes_transfer - 1) << SHIFT_BYTES_TRANSFER)
++						& (BYTES_TRANSFER_MASK))
++			| (reg & REG_ADDRESS_MASK);
++		break;
++
++	}
++
++	return cmd_word;
++}
++
++static int spi_write_transaction(struct rf_phy_dev *ad_phy, u8 *buf, int len)
++{
++	u8 *tx_buf;
++	int status;
++	struct spi_message spi_msg;
++	struct spi_transfer ad_tx;
++	struct ad_dev_info *phy_info = ad_phy->priv;
++
++	spi_message_init(&spi_msg);
++	memset(&ad_tx, 0, sizeof(ad_tx));
++
++	tx_buf = buf;
++	ad_tx.len = len;
++	ad_tx.tx_buf = &tx_buf[0];
++	ad_tx.rx_buf = &(phy_info->rx_buf[0]);
++
++	spi_message_add_tail(&ad_tx, &spi_msg);
++	status = spi_sync(phy_info->ad_spi, &spi_msg);
++
++	return status;
++}
++
++static int spi_read_transaction(struct rf_phy_dev *ad_phy, u8 *buf, int len)
++{
++	struct ad_dev_info *phy_info = ad_phy->priv;
++	u8 *tx_buf;
++	struct spi_message spi_msg;
++	struct spi_transfer ad_tx;
++	int status;
++
++	spi_message_init(&spi_msg);
++	memset(&ad_tx, 0, sizeof(ad_tx));
++
++	tx_buf = buf;
++	ad_tx.len = len;
++	ad_tx.tx_buf = &tx_buf[0];
++	ad_tx.rx_buf = &(phy_info->rx_buf[0]);
++
++	spi_message_add_tail(&ad_tx, &spi_msg);
++	status = spi_sync(phy_info->ad_spi, &spi_msg);
++
++	return status;
++}
++
++static int check_cal_done(struct rf_phy_dev *ad_phy, u32 reg, u32 mask,
++		u32 bitval)
++{
++	struct ad_dev_info *phy_info = ad_phy->priv;
++	struct device *dev = &phy_info->ad_spi->dev;
++	u32 val;
++	int rc = 0;
++	ad_phy_read(ad_phy, reg, 1, &val);
++	switch (bitval) {
++	case 0:
++		if (!(val & mask))
++			rc = 1;
++		break;
++	case 1:
++		if (val & mask)
++			rc = 1;
++		break;
++	default:
++		dev_err(dev, "Invalid bit value\n");
++		return -EINVAL;
++	}
++	return rc;
++}
++
++int save_tx_atten(struct rf_phy_dev *ad_phy)
++{
++	u32 buf[4];
++	u32 msb;
++	ad_phy_read(ad_phy, TX1_ATTEN0, sizeof(buf)/sizeof(u32), buf);
++	msb = buf[1] & ATTEN_MSB_BIT_MASK;
++	ad_phy->tx_atten[0] = (msb << MSB_SHIFT) + buf[0];
++	msb = buf[3] & ATTEN_MSB_BIT_MASK;
++	ad_phy->tx_atten[1] = (msb << MSB_SHIFT) + buf[2];
++	return 1;
++}
++
++int ad_phy_run_cmds(struct rf_phy_dev *ad_phy,
++		struct rif_phy_cmd *cmds, int count)
++{
++	struct ad_dev_info *phy_info = ad_phy->priv;
++	struct device *dev = &phy_info->ad_spi->dev;
++	int i, elapsed_time;
++	u32 val;
++
++	for (i = 0; i < count; i++) {
++		switch (cmds[i].cmd) {
++		case SPI_WRITE:
++			if (cmds[i].param1 == REG_RX_CP_CONFIG) {
++				ad_phy_read(ad_phy, REG_RX_CAL_STATUS, 1, &val);
++				if (val & MASK_RX_CP_CAL_VALID)
++					break;
++			} else if (cmds[i].param1 == REG_TX_CP_CONFIG) {
++				ad_phy_read(ad_phy, REG_TX_CAL_STATUS, 1, &val);
++				if (val & MASK_TX_CP_CAL_VALID)
++					break;
++			}
++			ad_phy_write(ad_phy, cmds[i].param1, cmds[i].param2);
++
++			dev_dbg(dev, "Write: %x %x\n", cmds[i].param1,
++							cmds[i].param2);
++			break;
++
++		case SPI_READ:
++
++			/* XXX: This READ is not returnning anything from
++			 * here so can be removed safely. But not removing
++			 * it completely from here because these reads may
++			 * impact timing between reg updates up RFIC.
++			 *
++			 * This needs to be fixed, right way is to return
++			 * read values, and let user space decide what to
++			 * do this value.
++			 */
++			ad_phy_read(ad_phy, cmds[i].param1, 1, &val);
++			dev_dbg(dev, "Read from reg: %x, val %x\n",
++				cmds[i].param1, val);
++			break;
++
++		case SPI_WAIT:
++			msleep_interruptible(cmds[i].param3);
++			break;
++
++		case SPI_WAIT_BBPLL_CAL:
++			for (elapsed_time = 1; elapsed_time < cmds[i].param3;
++					elapsed_time++) {
++				msleep_interruptible(1);
++				if (check_cal_done(ad_phy, REG_CH1_OVERFLOW,
++							MASK_BBPLL_LOCK, 1))
++					break;
++			}
++			break;
++
++		case SPI_WAIT_RXCP_CAL:
++			for (elapsed_time = 1; elapsed_time < cmds[i].param3;
++					elapsed_time++) {
++				msleep_interruptible(1);
++				if (check_cal_done(ad_phy, REG_RX_CAL_STATUS,
++						MASK_RX_CP_CAL_VALID, 1))
++					break;
++			}
++			break;
++
++		case SPI_WAIT_TXCP_CAL:
++			for (elapsed_time = 1; elapsed_time < cmds[i].param3;
++					elapsed_time++) {
++				msleep_interruptible(1);
++				if (check_cal_done(ad_phy,
++						REG_TX_CAL_STATUS,
++						MASK_TX_CP_CAL_VALID, 1))
++					break;
++			}
++			break;
++
++		case SPI_WAIT_RXFILTER_CAL:
++			for (elapsed_time = 1; elapsed_time < cmds[i].param3;
++					elapsed_time++) {
++				msleep_interruptible(1);
++				if (check_cal_done(ad_phy,
++						REG_CALIBRATION_CONTROL,
++						MASK_RX_BB_TUNE, 0))
++					break;
++			}
++			break;
++
++		case SPI_WAIT_TXFILTER_CAL:
++			for (elapsed_time = 1; elapsed_time < cmds[i].param3;
++					elapsed_time++) {
++				msleep_interruptible(1);
++				if (check_cal_done(ad_phy,
++						REG_CALIBRATION_CONTROL,
++						MASK_TX_BB_TUNE, 0))
++					break;
++			}
++			break;
++
++		case SPI_WAIT_BBDC_CAL:
++			for (elapsed_time = 1; elapsed_time < cmds[i].param3;
++					elapsed_time++) {
++				msleep_interruptible(1);
++				if (check_cal_done(ad_phy,
++						REG_CALIBRATION_CONTROL,
++						MASK_DC_CAL_BBSTART, 0))
++					break;
++			}
++			break;
++
++		case SPI_WAIT_RFDC_CAL:
++			for (elapsed_time = 1; elapsed_time < cmds[i].param3;
++					elapsed_time++) {
++				msleep_interruptible(1);
++				if (check_cal_done(ad_phy,
++						REG_CALIBRATION_CONTROL,
++						MASK_DC_CAL_RFSTART, 0))
++					break;
++			}
++			break;
++
++		case SPI_WAIT_TXQUAD_CAL:
++			for (elapsed_time = 1; elapsed_time < cmds[i].param3;
++					elapsed_time++) {
++				msleep_interruptible(1);
++				if (check_cal_done(ad_phy,
++						REG_CALIBRATION_CONTROL,
++						MASK_TXQUAD_CAL, 0))
++					break;
++			}
++			break;
++
++		case SPI_WAIT_CALDONE:
++			dev_info(dev, "Waiting for unknown CALDONE.\n");
++			msleep_interruptible(cmds[i].param3);
++			break;
++
++		default:
++			dev_dbg(dev, "Not a valid AD_PHY command\n");
++			return -EINVAL;
++		}
++	}
++
++	save_tx_atten(ad_phy);
++	return 0;
++}
++
++static int ad_save_synth_table(struct rf_phy_dev *ad_phy,
++		struct rf_synth_table *synth_table)
++{
++	struct ad_dev_info *phy_info = ad_phy->priv;
++	struct device *dev = &phy_info->ad_spi->dev;
++	int size = sizeof(unsigned long long) * synth_table->count *
++					NUM_SYNTH_PARAMS;
++
++	kfree(phy_info->synth_table.params);
++	kfree(phy_info->synth_table.reg_vals);
++	phy_info->synth_table.params =
++		(unsigned long long (*)[NUM_SYNTH_PARAMS])kzalloc
++			(size, GFP_KERNEL);
++	if (!phy_info->synth_table.params) {
++		dev_dbg(dev, "Failed to allocate rf_synth_table\n");
++		return -ENOMEM;
++	}
++	memcpy(phy_info->synth_table.params, synth_table->params, size);
++
++	size = sizeof(u8) * synth_table->count * NUM_SYNTH_REGS;
++	phy_info->synth_table.reg_vals = (u8 (*)[NUM_SYNTH_REGS])kzalloc
++						(size, GFP_KERNEL);
++	if (!phy_info->synth_table.reg_vals) {
++		dev_dbg(dev, "Failed to allocate rf_synth_table\n");
++		kfree(phy_info->synth_table.params);
++		return -ENOMEM;
++	}
++	memcpy(phy_info->synth_table.reg_vals, synth_table->reg_vals, size);
++	phy_info->synth_table.count = synth_table->count;
++
++	return 0;
++}
++
++static int get_split_table_gain(struct rf_phy_dev *ad_phy, u32 idx_reg,
++		struct rf_rx_gain *rx_gain)
++{
++	u32 val, tbl_addr, lna_index, tia_index, mixer_index;
++	int rc = 0;
++
++	/* Read LMT index */
++	ad_phy_read(ad_phy, idx_reg, 1, &val);
++	rx_gain->lmt_index = val & FULL_TBL_IDX_MASK;
++	ad_phy_read(ad_phy, REG_GAIN_TBL_ADDR, 1, &tbl_addr);
++	ad_phy_write(ad_phy, REG_GAIN_TBL_ADDR, val);
++	ad_phy_read(ad_phy, REG_GAIN_TBL_READ_DATA1, 1, &val);
++	lna_index = (val & LNA_GAIN_MASK) >> LNA_SHIFT;
++	mixer_index = (val & MIXER_GAIN_MASK) >> MIXER_SHIFT;
++	ad_phy_read(ad_phy, REG_GAIN_TBL_READ_DATA2, 1, &val);
++	tia_index = (val & TIA_GAIN_MASK) >> TIA_SHIFT;
++	rx_gain->lmt_gain = lna_table[lna_index] +
++				mixer_table[mixer_index] +
++				tia_table[tia_index];
++	ad_phy_write(ad_phy, REG_GAIN_TBL_ADDR, tbl_addr);
++
++	/* Read LPF Index */
++	ad_phy_read(ad_phy, idx_reg + 1, 1, &val);
++	rx_gain->lpf_gain = val & LPF_IDX_MASK;
++
++	/* Read Digital Gain */
++	rc = ad_phy_read(ad_phy, idx_reg + 2, 1, &val);
++	rx_gain->digital_gain = val & DIGITAL_IDX_MASK;
++
++	rx_gain->gain_db = rx_gain->lmt_gain + rx_gain->lpf_gain +
++				rx_gain->digital_gain;
++	return rc;
++}
++
++static int get_full_table_gain(struct rf_phy_dev *ad_phy, u32 idx_reg,
++		struct rf_rx_gain *rx_gain)
++{
++	struct ad_dev_info *phy_info = ad_phy->priv;
++	struct device *dev = &phy_info->ad_spi->dev;
++	u32 val;
++	enum rx_gain_table_name tbl;
++	struct rx_gain_info *gain_info;
++	int rc = 0, rx_gain_db;
++
++	if (ad_phy->ul_carrier_freq > 1300000)
++		tbl = FULL_TBL_1300_4000_MHZ;
++	else
++		tbl = FULL_TBL_200_1300_MHZ;
++
++	rc = ad_phy_read(ad_phy, idx_reg, 1, &val);
++	if (rc) {
++		dev_err(dev, "Unable to read gain tbl idx reg: %d\n", idx_reg);
++		goto out;
++	}
++
++	val = val & FULL_TBL_IDX_MASK;
++	gain_info = &phy_info->rx_gain[tbl];
++	if (val > gain_info->idx_step_offset) {
++		val = val - gain_info->idx_step_offset;
++		rx_gain_db = gain_info->starting_gain_db +
++			((val) * gain_info->gain_step_db);
++	} else {
++		rx_gain_db = gain_info->starting_gain_db;
++	}
++
++	rx_gain->gain_db = rx_gain_db;
++out:
++	return rc;
++}
++static int ad_get_rx_gain(struct rf_phy_dev *ad_phy,
++		struct rf_rx_gain *rx_gain)
++{
++	struct ad_dev_info *phy_info = ad_phy->priv;
++	struct device *dev = &phy_info->ad_spi->dev;
++	u32 val, idx_reg, max_gain = 0;
++	u8 gain_ctl_shift, rx_enable_mask;
++	u8 fast_atk_shift;
++	int check_saturation = 0, rc = 0;
++
++	if (rx_gain->ant == 1) {
++		gain_ctl_shift = RX1_GAIN_CTL_SHIFT;
++		idx_reg = REG_RX1_FULL_TBL_IDX;
++		rx_enable_mask = RX1_EN;
++		fast_atk_shift = RX1_FAST_ATK_SHIFT;
++
++	} else if (rx_gain->ant == 2) {
++		gain_ctl_shift = RX2_GAIN_CTL_SHIFT;
++		idx_reg = REG_RX2_FULL_TBL_IDX;
++		rx_enable_mask = RX2_EN;
++		fast_atk_shift = RX2_FAST_ATK_SHIFT;
++	} else {
++		dev_err(dev, "Unknown Rx path %d\n", rx_gain->ant);
++		rc = -EINVAL;
++		goto out;
++	}
++
++	rc = ad_phy_read(ad_phy, REG_RXEN_N_FILTER_CTRL, 1, &val);
++	if (rc) {
++		dev_err(dev, "Unable to read REG_RXEN_N_FILTER_CTRL\n");
++		goto out;
++	}
++
++	if (!(val & rx_enable_mask)) {
++		dev_err(dev, "Rx%d is not enabled\n", rx_gain->ant);
++		rc = -EAGAIN;
++		goto out;
++	}
++
++	rc = ad_phy_read(ad_phy, REG_AGC_CONF1, 1, &val);
++	if (rc) {
++		dev_err(dev, "Unable to read AGC_CONF1\n");
++		goto out;
++	}
++
++	val = (val >> gain_ctl_shift) & RX_GAIN_CTL_MASK;
++
++	if (val == RX_GAIN_CTL_AGC_FAST_ATK) {
++		/* In fast attack mode check whether Fast attack state machine
++		 * has locked gain, if not then we can not read gain.
++		 */
++		rc = ad_phy_read(ad_phy, REG_FAST_ATK_STATE, 1, &val);
++		if (rc) {
++			dev_err(dev, "Unable to read REG_FAST_ATK_STATE\n");
++			goto out;
++		}
++
++		val = (val >> fast_atk_shift) & FAST_ATK_MASK;
++		if (val == FAST_ATK_PWR_MEASURE) {
++			ad_phy_read(ad_phy, REG_MAX_LMT_FULL_GAIN, 1, &max_gain);
++			check_saturation = 1;
++		}
++		if (val != FAST_ATK_GAIN_LOCKED && !check_saturation) {
++			dev_err(dev, "Failed to read gain, state m/c at %x\n",
++				val);
++			rc = -EAGAIN;
++			goto out;
++		}
++	}
++
++	rc = ad_phy_read(ad_phy, REG_AGC_CONF2, 1, &val);
++	if (rc) {
++		dev_err(dev, "Unable to read AGC_CONF2\n");
++		goto out;
++	}
++
++	if (val & FULL_GAIN_TBL) {
++		rc = get_full_table_gain(ad_phy, idx_reg, rx_gain);
++		if (check_saturation && rx_gain->gain_db != max_gain) {
++			dev_err(dev, "Failed to read gain, state m/c at 2\n");
++			rc = -EAGAIN;
++			goto out;
++		}
++	} else {
++		rc = get_split_table_gain(ad_phy, idx_reg, rx_gain);
++		if (check_saturation && rx_gain->lmt_index != max_gain) {
++			dev_err(dev, "Failed to read gain, state m/c at 2\n");
++			rc = -EAGAIN;
++			goto out;
++		}
++	}
++
++out:
++	return rc;
++}
++
++static void ad_ensm_force_state(struct rf_phy_dev *ad_phy, u8 ensm_state)
++{
++	struct ad_dev_info *phy_info = ad_phy->priv;
++	struct device *dev = &phy_info->ad_spi->dev;
++	u8 dev_ensm_state;
++	int rc;
++	u32 val;
++
++	rc = ad_phy_read(ad_phy, REG_DEV_STATE, 1, &val);
++	if (rc)
++		goto out;
++
++	dev_ensm_state = (val & ENSM_STATE_MASK) >> ENSM_STATE_SHIFT;
++
++	if (dev_ensm_state == ensm_state) {
++		dev_info(dev, "Nothing to do, device is already in %d state\n",
++			ensm_state);
++		goto out;
++	}
++
++	phy_info->prev_ensm_state = dev_ensm_state;
++	dev_info(dev, "Device is in %x state, forcing to %x\n", dev_ensm_state,
++			ensm_state);
++
++	rc = ad_phy_read(ad_phy, REG_ENSM_CONF1, 1, &val);
++	if (rc)
++		goto out;
++
++	/* Enable control through SPI writes, and take out from
++	 * Alert
++	 */
++	if (val & ENSM_CONF1_ENSM_PIN_CTL_EN) {
++		val &= ~ENSM_CONF1_ENSM_PIN_CTL_EN;
++		phy_info->ensm_pin_ctl_en = 1;
++	} else {
++		phy_info->ensm_pin_ctl_en = 0;
++	}
++
++	if (dev_ensm_state & dev_ensm_state)
++		val &= ~(ENSM_CONF1_TO_ALERT);
++
++	switch (ensm_state) {
++
++	case ENSM_STATE_TX:
++		val |= ENSM_CONF1_FORCE_TX_ON;
++		break;
++	case ENSM_STATE_RX:
++		val |= ENSM_CONF1_FORCE_RX_ON;
++		break;
++	case ENSM_STATE_FDD:
++		val |= (ENSM_CONF1_FORCE_TX_ON | ENSM_CONF1_FORCE_RX_ON);
++		break;
++	default:
++		dev_err(dev, "No handleing for forcing %d ensm state\n",
++		ensm_state);
++		goto out;
++	}
++
++	rc = ad_phy_write(ad_phy, REG_ENSM_CONF1, val);
++	if (rc)
++		dev_err(dev, "Failed to restore state\n");
++
++out:
++	return;
++
++}
++
++static void ad_ensm_restore_prev_state(struct rf_phy_dev *ad_phy)
++{
++	struct ad_dev_info *phy_info = ad_phy->priv;
++	struct device *dev = &phy_info->ad_spi->dev;
++	int rc;
++	u32 val;
++
++	rc = ad_phy_read(ad_phy, REG_ENSM_CONF1, 1, &val);
++	if (rc) {
++		dev_err(dev, "Read REG_ENSM_CONF1 Failed, restore failed\n");
++		goto out;
++	}
++
++	/* We are restoring state only, so clear State bits first
++	 * which might have set while forcing a particular state
++	 */
++	val &= ~(ENSM_CONF1_FORCE_TX_ON | ENSM_CONF1_FORCE_RX_ON |
++			ENSM_CONF1_TO_ALERT);
++
++	switch (phy_info->prev_ensm_state) {
++
++	case ENSM_STATE_TX:
++		val |= ENSM_CONF1_FORCE_TX_ON;
++		break;
++	case ENSM_STATE_RX:
++		val |= ENSM_CONF1_FORCE_RX_ON;
++		break;
++	case ENSM_STATE_FDD:
++		val |= (ENSM_CONF1_FORCE_TX_ON | ENSM_CONF1_FORCE_RX_ON);
++		break;
++	case ENSM_STATE_ALERT:
++		val |= ENSM_CONF1_TO_ALERT;
++		break;
++	case ENSM_STATE_INVALID:
++		dev_dbg(dev, "No need to restore, ENSM state wasn't saved\n");
++		goto out;
++	default:
++		dev_dbg(dev, "Could not restore to %d ENSM state\n",
++		phy_info->prev_ensm_state);
++		goto out;
++	}
++
++	rc = ad_phy_write(ad_phy, REG_ENSM_CONF1, val);
++	if (rc) {
++		dev_err(dev, "Failed to write REG_ENSM_CONF1");
++		goto out;
++	}
++
++	if (phy_info->ensm_pin_ctl_en) {
++		val |= ENSM_CONF1_ENSM_PIN_CTL_EN;
++		rc = ad_phy_write(ad_phy, REG_ENSM_CONF1, val);
++		if (rc)
++			dev_err(dev, "Failed to write REG_ENSM_CONF1");
++	}
++
++out:
++	return;
++}
++
++static int set_split_table_gain(struct rf_phy_dev *ad_phy, u32 idx_reg,
++		struct rf_rx_gain *rx_gain)
++{
++	struct ad_dev_info *phy_info = ad_phy->priv;
++	struct device *dev = &phy_info->ad_spi->dev;
++	u32 val;
++	int rc = 0;
++
++	if ((rx_gain->lmt_index > MAX_LMT_INDEX) ||
++			(rx_gain->lpf_gain > MAX_LPF_GAIN) ||
++			(rx_gain->digital_gain > MAX_DIG_GAIN)) {
++		dev_err(dev, "LMT_INDEX missing or greater than max value %d",
++				MAX_LMT_INDEX);
++		dev_err(dev, "LPF_GAIN missing or greater than max value %d",
++				MAX_LPF_GAIN);
++		dev_err(dev, "DIGITAL_GAIN cannot be more than %d",
++				MAX_DIG_GAIN);
++		rc = -EINVAL;
++		goto out;
++	}
++	if (rx_gain->gain_db > 0)
++		dev_info(dev, "Ignoring rx_gain value in split table mode.");
++	if (rx_gain->lmt_index == 0 && rx_gain->lpf_gain == 0 &&
++			rx_gain->digital_gain == 0) {
++		dev_err(dev,
++		"In split table mode, All LMT/LPF/digital gains cannot be 0");
++		rc = -EINVAL;
++		goto out;
++	}
++
++	ad_phy_read(ad_phy, idx_reg, 1, &val);
++	val = val & ~FULL_TBL_IDX_MASK;
++	val |= rx_gain->lmt_index;
++	ad_phy_write(ad_phy, idx_reg, val);
++
++	ad_phy_read(ad_phy, idx_reg + 1, 1, &val);
++	val = val & ~LPF_IDX_MASK;
++	val |= rx_gain->lpf_gain;
++	ad_phy_write(ad_phy, idx_reg + 1, val);
++
++	ad_phy_read(ad_phy, REG_AGC_CONF2, 1, &val);
++	if (val & DIGITAL_GAIN_EN) {
++		ad_phy_read(ad_phy, idx_reg + 2, 1, &val);
++		val = val & ~DIGITAL_IDX_MASK;
++		val |= rx_gain->digital_gain;
++		ad_phy_write(ad_phy, idx_reg + 2, val);
++	} else if (rx_gain->digital_gain > 0) {
++		dev_err(dev, "Digital gain is disabled and cannot be set");
++	}
++out:
++	return rc;
++}
++
++static int set_full_table_gain(struct rf_phy_dev *ad_phy, u32 idx_reg,
++		struct rf_rx_gain *rx_gain)
++{
++	struct ad_dev_info *phy_info = ad_phy->priv;
++	struct device *dev = &phy_info->ad_spi->dev;
++	enum rx_gain_table_name tbl;
++	struct rx_gain_info *gain_info;
++	u32 val;
++	int rc = 0;
++
++	if (rx_gain->lmt_index != ~0 || rx_gain->lpf_gain != ~0 ||
++			rx_gain->digital_gain > 0)
++		dev_info(dev,
++			"Ignoring lmt/lpf/digital gains in Single Table mode");
++
++	if (ad_phy->ul_carrier_freq > 1300000)
++		tbl = FULL_TBL_1300_4000_MHZ;
++	else
++		tbl = FULL_TBL_200_1300_MHZ;
++
++	gain_info = &phy_info->rx_gain[tbl];
++	if ((rx_gain->gain_db < gain_info->starting_gain_db) ||
++		(rx_gain->gain_db > gain_info->max_gain_db)) {
++
++		dev_err(dev, "Invalid gain %d, supported range [%d - %d]\n",
++			rx_gain->gain_db, gain_info->starting_gain_db,
++			gain_info->max_gain_db);
++		rc = -EINVAL;
++		goto out;
++
++	}
++	rc = ad_phy_read(ad_phy, idx_reg, 1, &val);
++	if (rc) {
++		dev_err(dev, "Unable to read gain tbl idx reg: %d\n", idx_reg);
++		goto out;
++	}
++
++	val = val & ~FULL_TBL_IDX_MASK;
++	val |= ((rx_gain->gain_db - gain_info->starting_gain_db) /
++		gain_info->gain_step_db) + gain_info->idx_step_offset;
++	rc = ad_phy_write(ad_phy, idx_reg, val);
++out:
++	return rc;
++}
++
++static int ad_set_rx_gain(struct rf_phy_dev *ad_phy,
++		struct rf_rx_gain *rx_gain)
++{
++	struct ad_dev_info *phy_info = ad_phy->priv;
++	struct device *dev = &phy_info->ad_spi->dev;
++	u32 val, idx_reg;
++	u8 gain_ctl_shift, ensm_state;
++	int rc = 0;
++
++	if (rx_gain->ant == 1) {
++		gain_ctl_shift = RX1_GAIN_CTL_SHIFT;
++		idx_reg = REG_RX1_MGC_FULL_TBL_IDX;
++
++	} else if (rx_gain->ant == 2) {
++		gain_ctl_shift = RX2_GAIN_CTL_SHIFT;
++		idx_reg = REG_RX2_MGC_FULL_TBL_IDX;
++	} else {
++		dev_err(dev, "Unknown Rx path %d\n", rx_gain->ant);
++		rc = -EINVAL;
++		goto out;
++
++	}
++
++	rc = ad_phy_read(ad_phy, REG_AGC_CONF1, 1, &val);
++	if (rc) {
++		dev_err(dev, "Unable to read REG_AGC_CONF1\n");
++		goto out;
++	}
++
++	val = (val >> gain_ctl_shift) & RX_GAIN_CTL_MASK;
++
++	if (val != RX_GAIN_CTL_MGC) {
++		dev_err(dev, "Rx gain can be set in MGC mode only\n");
++		goto out;
++	}
++
++	if (phy_info->net_mode == LTE_FDD)
++		ensm_state = ENSM_STATE_FDD;
++	else
++		ensm_state = ENSM_STATE_RX;
++
++	/* RX must be enabled while changing Gain */
++	ad_ensm_force_state(ad_phy, ensm_state);
++
++	ad_phy_read(ad_phy, REG_AGC_CONF2, 1, &val);
++	if (val & FULL_GAIN_TBL)
++		rc = set_full_table_gain(ad_phy, idx_reg, rx_gain);
++	else
++		rc = set_split_table_gain(ad_phy, idx_reg, rx_gain);
++
++	/* Restore is done intentionally before checking rc, because
++	 * we need to restore PHY to previous state even if write failed
++	 */
++	ad_ensm_restore_prev_state(ad_phy);
++
++	if (rc) {
++		dev_err(dev, "Unable to write gain tbl idx reg: %d\n", idx_reg);
++		goto out;
++	}
++
++out:
++	return rc;
++
++}
++
++void ad_init_gain_info(struct rx_gain_info *rx_gain,
++	enum rx_gain_table_type type, int starting_gain,
++	int max_gain, int gain_step, int max_idx, int idx_offset)
++{
++	rx_gain->tbl_type = type;
++	rx_gain->starting_gain_db = starting_gain;
++	rx_gain->max_gain_db = max_gain;
++	rx_gain->gain_step_db = gain_step;
++	rx_gain->max_idx = max_idx;
++	rx_gain->idx_step_offset = idx_offset;
++}
++
++int ad_init_gain_tables(struct rf_phy_dev *ad_phy)
++{
++	struct rx_gain_info *rx_gain;
++	struct ad_dev_info *phy_info = ad_phy->priv;
++
++	/* Intialize Meta data according to default gain tables
++	 * of AD9631. Changing/Writing of gain tables is not
++	 * supported yet.
++	 */
++	rx_gain = &phy_info->rx_gain[FULL_TBL_200_1300_MHZ];
++	ad_init_gain_info(rx_gain, RXGAIN_FULL_TBL, 1, 77, 1,
++		RXGAIN_FULL_TBL_MAX_IDX, 0);
++
++	rx_gain = &phy_info->rx_gain[FULL_TBL_1300_4000_MHZ];
++	ad_init_gain_info(rx_gain, RXGAIN_FULL_TBL, -4, 71, 1,
++		RXGAIN_FULL_TBL_MAX_IDX, 1);
++
++	rx_gain = &phy_info->rx_gain[FULL_TBL_4000_6000_MHZ];
++	ad_init_gain_info(rx_gain, RXGAIN_FULL_TBL, -10, 62, 1,
++		RXGAIN_FULL_TBL_MAX_IDX, 4);
++
++	return 0;
++}
++
++int ad_config_master_slave(unsigned int lane_id, struct rf_phy_dev *ad_phy,
++			enum rf_lane_mode mode)
++{
++	int rc = 0;
++	u32 val;
++
++	switch (mode) {
++	case MASTER:
++		/* AD9361(RF Card) can act as Master clock/Slave clock source,
++		 * i.e it can either generate 19.2MHz or it can be configured
++		 * to receive 19.2MHz from other RF card. By default RF cards
++		 * comes up in Master mode
++		 *
++		 * By default in 9132, RF1 connector is used as the clock
++		 * source of 19.2MHz for AIC block.But when RF1 is not used
++		 * and RF card is inserted on RF2 conector, then RF2 should be
++		 * configured to act as clock source for 19.2MHz, that's why we
++		 * are specifically checking for LANE_TWO to configure it in
++		 * Master mode.
++		 *
++		 * In 9131, by default LANE3 is configured to act as the clock
++		 * source of 19.2MHz, so the below check is not valid for 9131
++		 */
++		if (lane_id == LANE_TWO)
++			select_ref_clock_source();
++		break;
++	case SLAVE:
++		rc = ad_phy_read(ad_phy, REG_GPO_FORCE_INIT, 1, &val);
++		val |= GPO3_MANUAL_CONTROL;
++		ad_phy_write(ad_phy, REG_GPO_FORCE_INIT, val);
++		break;
++	default:
++		rc = -EINVAL;
++		goto out;
++	}
++
++out:
++	return rc;
++}
++
++int ad_set_gain_ctrl_mode(struct rf_phy_dev *ad_phy,
++		struct rf_gain_ctrl *gain_ctrl)
++{
++	struct ad_dev_info *phy_info = ad_phy->priv;
++	struct device *dev = &phy_info->ad_spi->dev;
++	int rc = 0;
++	u32 val, gain_ctl_shift, mode;
++
++	rc = ad_phy_read(ad_phy, REG_AGC_CONF1, 1, &val);
++	if (rc) {
++		dev_err(dev, "Unable to read AGC config1 register: %x\n",
++				REG_AGC_CONF1);
++		goto out;
++	}
++
++	switch (gain_ctrl->mode) {
++	case MGC:
++		mode = RX_GAIN_CTL_MGC;
++		break;
++	case FASTATTACK_AGC:
++		mode = RX_GAIN_CTL_AGC_FAST_ATK;
++		break;
++	case SLOWATTACK_AGC:
++		mode = RX_GAIN_CTL_AGC_SLOW_ATK;
++		break;
++	case HYBRID_AGC:
++		mode = RX_GAIN_CTL_AGC_SLOW_ATK_HYBD;
++		break;
++	default:
++		rc = -EINVAL;
++		goto out;
++	}
++
++	if (gain_ctrl->ant == 1) {
++		gain_ctl_shift = RX1_GAIN_CTL_SHIFT;
++	} else if (gain_ctrl->ant == 2) {
++		gain_ctl_shift = RX2_GAIN_CTL_SHIFT;
++	} else {
++		dev_err(dev, "Unknown Rx path %d\n", gain_ctrl->ant);
++		rc = -EINVAL;
++		goto out;
++	}
++
++	rc = ad_en_dis_rx(ad_phy, gain_ctrl->ant, RX_DISABLE);
++	if (rc) {
++		dev_err(dev, "Unable to disable rx%d\n", gain_ctrl->ant);
++		goto out;
++	}
++
++	val &= ~(RX_GAIN_CTL_MASK << gain_ctl_shift);
++	val |= mode << gain_ctl_shift;
++	if (mode == RX_GAIN_CTL_AGC_SLOW_ATK_HYBD)
++		val |= SLOW_ATK_HYBD_BIT_EN;
++	else
++		val &= ~SLOW_ATK_HYBD_BIT_EN;
++	rc = ad_phy_write(ad_phy, REG_AGC_CONF1, val);
++	if (rc) {
++		dev_err(dev, "Unable to write AGC config1 register: %x\n",
++				REG_AGC_CONF1);
++		goto out;
++	}
++
++	rc = ad_en_dis_rx(ad_phy, gain_ctrl->ant, RX_ENABLE);
++out:
++	return rc;
++}
++
++int ad_program_synthesizer(struct rf_phy_dev *ad_phy,
++			unsigned long carrier_freq,
++			enum rf_synthesizer rf_synth)
++{
++	struct ad_dev_info *phy_info = ad_phy->priv;
++	struct device *dev = &phy_info->ad_spi->dev;
++	int ret = 0, i = 1;
++	unsigned int block_scalar, vco_divider_shift, reg_offset;
++	unsigned long f_rfpll, f_ref, n_int, n_frac;
++	unsigned long freq = MAX_CARRIER_FREQ_KHZ;
++	unsigned long long f_rfpll_hz;
++	u8 divider_mask, vco_divider = i - 1;
++	u32 val[2], temp;
++
++	if (carrier_freq > MAX_CARRIER_FREQ_KHZ ||
++			carrier_freq < MIN_CARRIER_FREQ_KHZ) {
++		dev_err(dev, "Invalid carrier freq %lu KHz\n",
++			carrier_freq);
++		ret = -EINVAL;
++		goto out;
++	}
++
++	/*
++	 * RFPLL works in freq range of 6-12 Ghz, So to convert carrier freq
++	 * in this range vco divider is programmed accordingly.
++	 */
++	while (freq > MIN_CARRIER_FREQ_KHZ) {
++		if (carrier_freq > (freq >> 1)) {
++			vco_divider = (u8) i - 1;
++			break;
++		} else {
++			freq = freq >> 1;
++			i++;
++		}
++	}
++
++	/*
++	 * To get the f_rfpll from carrier freq and appropriate vco divider:
++	 * f_rfpll = carrier_freq * (2^(vco_divider + 1))
++	 */
++	f_rfpll = carrier_freq << (vco_divider + 1);
++
++	ad_phy_read(ad_phy, REG_REF_DIVIDE_CONFIG1, 2, val);
++	if (rf_synth == RF_RX) {
++		/* For RX synthesizer block scalar is represented by
++		 * REG_REF_DIVIDE_CONFIG1[D0] and REG_REF_DIVIDE_CONFIG2[D7] */
++		block_scalar = ((val[0] & RX_SCALER_MASK1) << 1) +
++				((val[1] & RX_SCALER_MASK2) >> 7);
++		reg_offset = RX_REG_OFFSET;
++		/* For RX synthesizer, VCO divider is programmed in
++		 * REG_RFPLL_DIVIDER[D3:D0] */
++		vco_divider_shift = 0;
++		divider_mask = 0xF0;
++	} else if (rf_synth == RF_TX) {
++		/* For TX synthesizer block scalar is represented by
++		 * REG_REF_DIVIDE_CONFIG2[D3:D2] */
++		block_scalar = (val[1] & TX_SCALER_MASK) >> 2;
++		reg_offset = TX_REG_OFFSET;
++		/* For TX synthesizer, VCO divider is programmed in
++		 * REG_RFPLL_DIVIDER[D7:D4] */
++		vco_divider_shift = 4;
++		divider_mask = 0x0F;
++	} else {
++		dev_err(dev, "RF_BBPLL synth programming not supported\n");
++		ret = -EINVAL;
++		goto out;
++	}
++
++	switch (block_scalar) {
++	case 0:
++		f_ref = DEVICE_REF_FREQ_KHZ;
++		break;
++	case 1:
++		f_ref = DEVICE_REF_FREQ_KHZ / 2;
++		break;
++	case 2:
++		f_ref = DEVICE_REF_FREQ_KHZ / 4;
++		break;
++	case 3:
++		f_ref = DEVICE_REF_FREQ_KHZ * 2;
++		break;
++	default:
++		f_ref = DEVICE_REF_FREQ_KHZ * 2;
++	}
++
++	f_rfpll_hz = (unsigned long long)f_rfpll * 1000;
++	i = 0;
++	while (i < phy_info->synth_table.count &&
++		(phy_info->synth_table.params[i][VCO_Frequency] > f_rfpll_hz))
++		i++;
++
++	/* n_int = floor(f_rfpll / f_ref) */
++	n_int = f_rfpll / f_ref;
++
++	/* Divide f_rfpll and f_ref by 100 to avoid 64 bit operations */
++	f_rfpll /= 100;
++	f_ref /= 100;
++
++	/*
++	 * n_frac = Round(8388593 * ((f_rfpll/f_ref - n_int)))
++	 * 8388593 is a constant for RX and TX synthesizer
++	 * and it is denoted as rfpll modulus
++	 */
++	n_frac = (RFPLL_MODULUS * (f_rfpll - (n_int * f_ref)) +
++			(f_ref / 2)) / f_ref;
++
++	/* Program various registers according to the synthesizer look up
++	 * table and f_rfpll(vco frequency) */
++
++	ad_phy_read(ad_phy, REG_VCO_OUTPUT + reg_offset, 1, &temp);
++	temp = (temp & MASK_VCO_OUTPUT) |
++		phy_info->synth_table.reg_vals[i][VCO_Output_Level];
++	ad_phy_write(ad_phy, REG_VCO_OUTPUT + reg_offset, temp);
++
++	ad_phy_read(ad_phy, REG_VCO_VARACTOR + reg_offset, 1, &temp);
++	temp = (temp & MASK_VCO_VARACTOR) |
++		phy_info->synth_table.reg_vals[i][VCO_Varactor];
++	ad_phy_write(ad_phy, REG_VCO_VARACTOR + reg_offset, temp);
++
++	ad_phy_read(ad_phy, REG_VCO_BIAS1 + reg_offset, 1, &temp);
++	temp = (temp & MASK_VCO_BIAS1) |
++		phy_info->synth_table.reg_vals[i][VCO_Bias_Ref];
++	temp |= (phy_info->synth_table.reg_vals[i][VCO_Bias_Tcf] <<
++		SHIFT_VCO_BIAS_TCF);
++	ad_phy_write(ad_phy, REG_VCO_BIAS1 + reg_offset, temp);
++
++	ad_phy_read(ad_phy, REG_FORCE_VCO_TUNE1 + reg_offset, 1, &temp);
++	temp = (temp & MASK_FORCE_VCO_TUNE1) |
++		(phy_info->synth_table.reg_vals[i][VCO_Cal_Offset] <<
++		SHIFT_VCO_CAL_OFFSET);
++	ad_phy_write(ad_phy, REG_FORCE_VCO_TUNE1 + reg_offset, temp);
++
++	ad_phy_read(ad_phy, REG_VCO_VARACTOR_CONTROL1 + reg_offset, 1, &temp);
++	temp = (temp & MASK_VCO_VARACTOR_CONTROL1) |
++		phy_info->synth_table.reg_vals[i][VCO_Varactor_Reference];
++	ad_phy_write(ad_phy, REG_VCO_VARACTOR_CONTROL1 + reg_offset, temp);
++
++	ad_phy_read(ad_phy, REG_CP_CURRENT + reg_offset, 1, &temp);
++	temp = (temp & MASK_CP_CURRENT) |
++		phy_info->synth_table.reg_vals[i][Charge_Pump_Current];
++	ad_phy_write(ad_phy, REG_CP_CURRENT + reg_offset, temp);
++
++	temp =  (phy_info->synth_table.reg_vals[i][Loop_Filter_C2] <<
++			SHIFT_LOOP_FILTER_C2);
++	temp |= phy_info->synth_table.reg_vals[i][Loop_Filter_C1];
++	ad_phy_write(ad_phy, REG_LOOP_FILTER1 + reg_offset, temp);
++
++	temp =  (phy_info->synth_table.reg_vals[i][Loop_Filter_R1] <<
++			SHIFT_LOOP_FILTER_R1);
++	temp |= phy_info->synth_table.reg_vals[i][Loop_Filter_C3];
++	ad_phy_write(ad_phy, REG_LOOP_FILTER2 + reg_offset, temp);
++
++	ad_phy_read(ad_phy, REG_LOOP_FILTER3 + reg_offset, 1, &temp);
++	temp = (temp & MASK_LOOP_FILTER3) |
++		phy_info->synth_table.reg_vals[i][Loop_Filter_R3];
++	ad_phy_write(ad_phy, REG_LOOP_FILTER3 + reg_offset, temp);
++
++	temp = (n_frac & MASK_FRAC_B0) >> SHIFT_FRAC_B0;
++	ad_phy_write(ad_phy, REG_FRACTIONAL_BYTE0 + reg_offset, temp);
++	temp = (n_frac & MASK_FRAC_B1) >> SHIFT_FRAC_B1;
++	ad_phy_write(ad_phy, REG_FRACTIONAL_BYTE1 + reg_offset, temp);
++	temp = (n_frac & MASK_FRAC_B2) >> SHIFT_FRAC_B2;
++	ad_phy_write(ad_phy, REG_FRACTIONAL_BYTE2 + reg_offset, temp);
++
++	/* n_integer is programmed in the last so that calibration is
++	 * triggered*/
++	ad_phy_read(ad_phy, REG_INTEGER_BYTE1 + reg_offset, 1, &temp);
++	temp = (temp & MASK_INTEGER_REG1) |
++		((n_int & MASK_INT_B1) >> SHIFT_INT_B1);
++	ad_phy_write(ad_phy, REG_INTEGER_BYTE1 + reg_offset, temp);
++
++	temp = (n_int & MASK_INT_B0);
++	ad_phy_write(ad_phy, REG_INTEGER_BYTE0 + reg_offset, temp);
++
++	ad_phy_read(ad_phy, REG_RFPLL_DIVIDER, 1, &temp);
++	temp = (temp & divider_mask) | (vco_divider << vco_divider_shift);
++	ad_phy_write(ad_phy, REG_RFPLL_DIVIDER, temp);
++
++out:
++	return ret;
++}
++
++int ad_config_sniff(struct rf_phy_dev *ad_phy,
++	struct rf_sniff_params *sniff_params)
++{
++	struct ad_dev_info *phy_info = ad_phy->priv;
++	struct device *dev = &phy_info->ad_spi->dev;
++	struct rf_init_params *dev_params = &sniff_params->dev_params;
++	int ret = 0;
++	int i, j, band_found = 0;
++
++	if (phy_info->config_mode == GPIO_MODE ||
++		phy_info->config_mode == INVALID_MODE) {
++		if (phy_info->pa_en_gpio == GPIO_INVAL ||
++				phy_info->lna_en_gpio == GPIO_INVAL) {
++			dev_info(dev, "Control GPIOs not intialized in dtb\n");
++			goto skip;
++		}
++	}
++
++	for (i = 0; i < MAX_GPIO_CONFIGS; i++) {
++		for (j = 0; j < phy_info->band_grp_sniff_size[i]; j++) {
++			if (phy_info->band_grp_sniff[i][j] ==
++					dev_params->fq_band) {
++				band_found = 1;
++				break;
++			}
++		}
++		if (band_found)
++			break;
++	}
++	if (band_found) {
++		if (phy_info->config_mode == FPGA_MODE)
++			config_rf_regulator(phy_info->band_grp_cfg[i][0],
++					phy_info->band_grp_cfg[i][1],
++					phy_info->rf_num);
++		else {
++			gpio_set_value(phy_info->pa_en_gpio,
++					phy_info->band_grp_cfg[i][0]);
++			gpio_set_value(phy_info->lna_en_gpio,
++					phy_info->band_grp_cfg[i][1]);
++		}
++	} else {
++		dev_err(dev, "band %d not found in band_group_sniff\n",
++				dev_params->fq_band);
++		ret = -EINVAL;
++		goto out;
++	}
++skip:
++	phy_info->freq_band = dev_params->fq_band;
++	phy_info->net_mode = dev_params->mode;
++	ret = ad_program_synthesizer(ad_phy, sniff_params->carrier_freq,
++					RF_RX);
++out:
++	return ret;
++}
++
++static int ad_set_band(struct rf_phy_dev *ad_phy, unsigned int band)
++{
++	struct ad_dev_info *phy_info = ad_phy->priv;
++	struct device *dev = &phy_info->ad_spi->dev;
++	int i, j, rc = 0;
++	int band_found = 0;
++
++	if (phy_info->config_mode == GPIO_MODE ||
++		phy_info->config_mode == INVALID_MODE) {
++		if (phy_info->pa_en_gpio == GPIO_INVAL ||
++				phy_info->lna_en_gpio == GPIO_INVAL) {
++			dev_info(dev, "Control GPIOs not intialized in dtb\n");
++			goto skip;
++		}
++	}
++
++	for (i = 0; i < MAX_GPIO_CONFIGS; i++) {
++		for (j = 0; j < phy_info->band_grp_size[i]; j++) {
++			if (phy_info->band_grp[i][j] == band) {
++				band_found = 1;
++				break;
++			}
++		}
++		if (band_found)
++			break;
++	}
++
++	if (band_found) {
++		if (phy_info->config_mode == FPGA_MODE)
++			config_rf_regulator(phy_info->band_grp_cfg[i][0],
++					phy_info->band_grp_cfg[i][1],
++					phy_info->rf_num);
++		else {
++			gpio_set_value(phy_info->pa_en_gpio,
++					phy_info->band_grp_cfg[i][0]);
++			gpio_set_value(phy_info->lna_en_gpio,
++					phy_info->band_grp_cfg[i][1]);
++		}
++	} else {
++		dev_err(dev, "band %d not found in band_groups\n", band);
++		rc = -EINVAL;
++		goto out;
++	}
++skip:
++	phy_info->freq_band = band;
++
++out:
++	return rc;
++}
++
++int ad_init(struct rf_phy_dev *ad_phy,
++		struct rf_init_params *params)
++{
++	struct ad_dev_info *phy_info = ad_phy->priv;
++	struct device *dev = &phy_info->ad_spi->dev;
++	int rc = 0;
++	unsigned int svr = mfspr(SPRN_SVR);
++	u32 default_rssi_delay[4] = {RSSI_DELAY_5MHZ,
++					RSSI_DELAY_10MHZ,
++					RSSI_DELAY_15MHZ,
++					RSSI_DELAY_20MHZ};
++
++	rc = ad_set_band(ad_phy, params->fq_band);
++	if (rc) {
++		dev_err(dev, "Failed to set band %d\n", rc);
++		goto out;
++	}
++
++	rc = ad_program_synthesizer(ad_phy, params->ul_freq_khz,
++					RF_RX);
++	if (rc)
++		goto out;
++
++	rc = ad_program_synthesizer(ad_phy, params->dl_freq_khz,
++					RF_TX);
++	if (rc)
++		goto out;
++
++	ad_phy->ul_carrier_freq = params->ul_freq_khz;
++	ad_phy->dl_carrier_freq = params->dl_freq_khz;
++
++	rc = ad_phy_write(ad_phy, RSSI_DELAY_REG,
++			default_rssi_delay[params->bw]);
++	if (rc) {
++		dev_err(dev, "Unable to write rssi_delay reg: %d\n",
++				RSSI_DELAY_REG);
++		goto out;
++	}
++
++	phy_info->net_mode = params->mode;
++	phy_info->prev_ensm_state = ENSM_STATE_INVALID;
++
++	if ((params->mode == LTE_TDD) && (svr == SVR_9131S_REV1 ||
++				svr == SVR_9131S))
++		enable_tdd_int(params->tx_rxmode);
++out:
++	return rc;
++}
++
++int ad_phy_stop(struct rf_phy_dev *ad_phy)
++{
++	struct ad_dev_info *phy_info = ad_phy->priv;
++
++	ad_en_dis_tx(ad_phy, 1, TX_DISABLE);
++	ad_en_dis_tx(ad_phy, 2, TX_DISABLE);
++	ad_en_dis_rx(ad_phy, 1, RX_DISABLE);
++	ad_en_dis_rx(ad_phy, 2, RX_DISABLE);
++
++	ad_phy_write(ad_phy, REG_CALIBRATION_CONFIG1,
++			VAL_CAL_CONF1_TRACKOFF);
++
++	kfree(phy_info->synth_table.params);
++	kfree(phy_info->synth_table.reg_vals);
++	phy_info->synth_table.params = NULL;
++	phy_info->synth_table.reg_vals = NULL;
++
++	return 0;
++}
++
++int ad_phy_start(struct rf_phy_dev *ad_phy)
++{
++	struct ad_dev_info *phy_info = ad_phy->priv;
++	struct device *dev = &phy_info->ad_spi->dev;
++
++	dev_dbg(dev, "Reading BBPLL locked status.\n");
++
++	if (check_cal_done(ad_phy, REG_CH1_OVERFLOW,
++			MASK_BBPLL_LOCK, 1))
++		return 0;
++	else {
++		dev_err(dev, "BBPLL not locked.\n");
++		return -EBUSY;
++	}
++}
++
++int ad_phy_read(struct rf_phy_dev *ad_phy, u32 start,
++		u32 count, u32 *buff)
++{
++	u32 data;
++	u16 rx_cmd, read_addr;
++	int i = 0, j = 0, rc;
++	struct ad_dev_info *phy_info = ad_phy->priv;
++	struct device *dev = &phy_info->ad_spi->dev;
++
++	/* RFdev f/w provides start address as u32, but
++	 * ADI has only 12 bits regs, so downsize it to 16 bits
++	 */
++	read_addr =  (u16)(start + count - 1);
++	j = count - 1;
++
++	while (count > MAX_READ_TRANSACTION_SIZE) {
++		rx_cmd = create_ad_phy_cmd(read_addr, SPI_READ,
++			MAX_READ_TRANSACTION_SIZE);
++
++		rc = spi_read_transaction(ad_phy, (u8 *)&rx_cmd,
++				RXBUF_SIZE);
++		if (rc)
++			goto out;
++
++		for (i = COMMAND_LEN; i < RXBUF_SIZE ; i++) {
++			data = phy_info->rx_buf[i];
++			buff[j--] = data;
++		}
++
++		count -= MAX_READ_TRANSACTION_SIZE;
++		read_addr = read_addr - MAX_READ_TRANSACTION_SIZE;
++	}
++
++	rx_cmd = create_ad_phy_cmd(read_addr, SPI_READ, count);
++
++	rc = spi_read_transaction(ad_phy, (u8 *)&rx_cmd, (COMMAND_LEN + count));
++	if (rc)
++		goto out;
++
++	for (i = COMMAND_LEN; i < (COMMAND_LEN + count); i++) {
++		data = phy_info->rx_buf[i];
++		buff[j--] = data;
++	}
++
++out:
++	dev_dbg(dev, "Failed to read %d regs, start addr %x\n",
++		count, start);
++	return rc;
++}
++
++int ad_phy_write(struct rf_phy_dev *ad_phy, u32 reg,
++		u32 data)
++{
++	int rc;
++	u32 cmd = 0;
++	u16 ad_reg;
++	struct ad_dev_info *phy_info = ad_phy->priv;
++	struct device *dev = &phy_info->ad_spi->dev;
++
++	dev_dbg(dev, "AD's register write call.\n");
++	/* Rfdev f/w sends reg as 32 bit address, but ADI has
++	 * only 12 bit register addresses, thus downsize to
++	 * u16
++	 */
++	ad_reg = (u16) reg;
++	cmd = create_ad_phy_cmd(ad_reg, SPI_WRITE, 1);
++	cmd = (cmd << 16) & COMMAND_MASK;
++	cmd = cmd | (data << 8);
++	rc = spi_write_transaction(ad_phy, (u8 *)&cmd, TRANSACTION_BYTES);
++
++	return rc;
++}
++
++int ad_phy_get_dac_value(struct rf_phy_dev *ad_phy,
++			u32 correction_type , u32 *buff)
++{
++	u32 reg = 0;
++	struct ad_dev_info *phy_info = ad_phy->priv;
++	struct device *dev = &phy_info->ad_spi->dev;
++
++	dev_dbg(dev, "DAC's register read call.\n");
++	switch (correction_type) {
++	case COARSE_CORRECTION:
++		reg = DAC1_CONFIG;
++		break;
++	case FINE_CORRECTION:
++		reg = DAC1_WORD;
++		break;
++	default:
++		return -EINVAL;
++	}
++
++	return ad_phy_read(ad_phy, reg, 1, buff);
++}
++
++int ad_phy_dac_correction(struct rf_phy_dev *ad_phy,
++			struct rif_dac_params *dac_params)
++{
++	u32 reg = 0;
++	struct ad_dev_info *phy_info = ad_phy->priv;
++	struct device *dev = &phy_info->ad_spi->dev;
++
++	dev_dbg(dev, "DAC's register write call.\n");
++	switch (dac_params->correction_type) {
++	case COARSE_CORRECTION:
++		reg = DAC1_CONFIG;
++		break;
++	case FINE_CORRECTION:
++		reg = DAC1_WORD;
++		break;
++	default:
++		return -EINVAL;
++	}
++
++	return ad_phy_write(ad_phy, reg, dac_params->correction_value);
++}
++
++int ad_set_tx_atten(struct rf_phy_dev *ad_phy, u32 tx_if, u32 tx_atten)
++{
++	u32 reg_addr1, reg_addr2, reg_val;
++	int rc = 0;
++
++	if (tx_if == 1) {
++		reg_addr1 = TX1_ATTEN0;
++		reg_addr2 = TX1_ATTEN1;
++	} else if (tx_if == 2) {
++		reg_addr1 = TX2_ATTEN0;
++		reg_addr2 = TX2_ATTEN1;
++	} else {
++		rc = -EINVAL;
++		goto out;
++	}
++
++	reg_val = tx_atten & ATTEN0_MASK;
++	ad_phy_write(ad_phy, reg_addr1, reg_val);
++	reg_val = tx_atten & ATTEN1_MASK;
++	reg_val = reg_val >> MSB_SHIFT;
++	ad_phy_write(ad_phy, reg_addr2, reg_val);
++	ad_phy->tx_atten[tx_if - 1] = tx_atten;
++
++out:
++	return rc;
++}
++
++int ad_en_dis_tx(struct rf_phy_dev *ad_phy, u32 tx_if, u32 tx_cmd)
++{
++	u32 mask, reg_val;
++	ad_phy_read(ad_phy, TX_ENABLE_REG, 1,  &reg_val);
++	if (tx_if == 1)
++		mask = TX1_ENABLE_MASK;
++	else if (tx_if == 2)
++		mask = TX2_ENABLE_MASK;
++	else
++		return -EFAULT;
++
++	if (tx_cmd == TX_ENABLE)
++		reg_val |= mask;
++	else if (tx_cmd == TX_DISABLE)
++		reg_val &= ~mask;
++	else
++		return -EFAULT;
++	return  ad_phy_write(ad_phy, TX_ENABLE_REG, reg_val);
++}
++
++int ad_en_dis_rx(struct rf_phy_dev *ad_phy, u32 rx_if, u32 rx_cmd)
++{
++	u32 mask, reg_val;
++	ad_phy_read(ad_phy, RX_ENABLE_REG, 1,  &reg_val);
++	if (rx_if == 1)
++		mask = RX1_ENABLE_MASK;
++	else if (rx_if == 2)
++		mask = RX2_ENABLE_MASK;
++	else
++		return -EFAULT;
++
++	if (rx_cmd == RX_ENABLE)
++		reg_val |= mask;
++	else if (rx_cmd == RX_DISABLE)
++		reg_val &= ~mask;
++	else
++		return -EFAULT;
++	return  ad_phy_write(ad_phy, RX_ENABLE_REG, reg_val);
++}
++
++static int ad_read_rssi(struct rf_phy_dev *ad_phy, struct rf_rssi *rssi)
++{
++	struct ad_dev_info *phy_info = ad_phy->priv;
++	struct device *dev = &phy_info->ad_spi->dev;
++	u32 reg_val_buf[6], weight[4], total_dur, val, temp;
++	u32 subframe_size[4] = {SUBFRAME_SIZE_5MHZ,
++				SUBFRAME_SIZE_10MHZ,
++				SUBFRAME_SIZE_15MHZ,
++				SUBFRAME_SIZE_20MHZ};
++	u8 dur_buf[4] = {0}, i, j;
++	int rc;
++
++	if (rssi->duration > 1) {
++		dev_err(dev, "RSSI measurement duration > 1ms not supported\n");
++		rc = -EINVAL;
++		goto out;
++	}
++
++	rc = ad_phy_read(ad_phy, RSSI_CONFIG_REG, 1, &val);
++	val &= RSSI_MEAS_MODE_MASK;
++	val |= RSSI_GAIN_CHANGE_EN_AGC_MODE;
++	rc |= ad_phy_write(ad_phy, RSSI_CONFIG_REG, val);
++	if (rc) {
++		dev_err(dev, "Unable to read/write rssi config reg\n");
++		goto out;
++	}
++
++	temp = subframe_size[ad_phy->ctrl_dev->bw] * rssi->duration;
++	for (i = 0, j = 0; temp != 0 && j < 4; i++) {
++		if (temp & 0x01)
++			dur_buf[j++] = i;
++		temp = temp >> 1;
++	}
++
++	total_dur = (1 << dur_buf[0]) + (1 << dur_buf[1]) +
++			(1 << dur_buf[2]) + (1 << dur_buf[3]);
++	weight[0] = RSSI_MAX_WEIGHT * (1 << dur_buf[0]) / total_dur;
++	weight[1] = RSSI_MAX_WEIGHT * (1 << dur_buf[1]) / total_dur;
++	weight[2] = RSSI_MAX_WEIGHT * (1 << dur_buf[2]) / total_dur;
++	weight[3] = RSSI_MAX_WEIGHT * (1 << dur_buf[3]) / total_dur;
++	rc = ad_phy_write(ad_phy, RSSI_MEAS_DUR_10_REG,
++			((dur_buf[1] << 4) | dur_buf[0])) ||
++		ad_phy_write(ad_phy, RSSI_MEAS_DUR_32_REG,
++			((dur_buf[3] << 4) | dur_buf[2])) ||
++		ad_phy_write(ad_phy, RSSI_WEIGHT0_REG, weight[0]) ||
++		ad_phy_write(ad_phy, RSSI_WEIGHT1_REG, weight[1]) ||
++		ad_phy_write(ad_phy, RSSI_WEIGHT2_REG, weight[2]) ||
++		ad_phy_write(ad_phy, RSSI_WEIGHT3_REG, weight[3]);
++	if (rc) {
++		dev_err(dev, "Unable to write rssi measurement duration\n");
++		goto out;
++	}
++
++	rc = ad_phy_read(ad_phy, RSSI_READBACK_REG,
++			sizeof(reg_val_buf) / sizeof(u32), reg_val_buf);
++
++	if (rssi->ant == 1) {
++		rssi->symbol = RSSI_RESOLUTION *
++				((reg_val_buf[0] << LSB_SHIFT) +
++				 (reg_val_buf[4] & RSSI_LSB_MASK1));
++		rssi->preamble = RSSI_RESOLUTION *
++				((reg_val_buf[1] << LSB_SHIFT) +
++				 (reg_val_buf[5] & RSSI_LSB_MASK1));
++	} else if (rssi->ant == 2) {
++		rssi->symbol = RSSI_RESOLUTION *
++				((reg_val_buf[2] << LSB_SHIFT) +
++				 ((reg_val_buf[4] & RSSI_LSB_MASK2) >> 1));
++		rssi->preamble = RSSI_RESOLUTION *
++				((reg_val_buf[3] << LSB_SHIFT) +
++				 ((reg_val_buf[5] & RSSI_LSB_MASK2) >> 1));
++	} else
++		rc = -EFAULT;
++
++	rssi->multiplier = RSSI_MULTIPLIER;
++
++out:
++	return rc;
++}
++
++static int ad_phy_remove(struct spi_device *spi)
++{
++	int i, ret = 0;
++	struct device *dev = &spi->dev;
++	struct rf_phy_dev *ad_phy = dev_get_drvdata(&spi->dev);
++	struct ad_dev_info *phy_info = ad_phy->priv;
++
++	dev_dbg(dev, "AD9361 PHY module uninstalled\n");
++
++	gpio_free(phy_info->reset_gpio);
++	gpio_free(phy_info->pa_en_gpio);
++	gpio_free(phy_info->lna_en_gpio);
++
++	ret = unregister_rf_phy_dev(ad_phy);
++	if (ret < 0) {
++		dev_dbg(dev, "unregister_rf_phy_dev failed.\n");
++		return ret;
++	}
++
++	for (i = 0; i < MAX_GPIO_CONFIGS; i++) {
++		kfree(phy_info->band_grp[i]);
++		kfree(phy_info->band_grp_sniff[i]);
++	}
++	ret = free_rf_phy_dev(ad_phy);
++
++	return ret;
++}
++
++static int check_revision(struct rf_phy_dev *ad_phy)
++{
++	u32 val;
++	u8 product_id, rev;
++	int rc = 0;
++	struct ad_dev_info *phy_info = ad_phy->priv;
++	struct device *dev = &(phy_info->ad_spi->dev);
++
++	ad_phy_read(ad_phy, PRODUCT_CODE_REG, 1, &val);
++
++	product_id = (u8) val & PRODUCT_ID_MASK;
++	if (product_id != PRODUCT_ID_9361) {
++		dev_err(dev, "Unsuported product id 0x%x\n", product_id);
++		rc = -ENODEV;
++		goto out;
++	}
++
++	rev = (u8) val & REV_MASK;
++	if (rev != 2) {
++		dev_err(dev, "Unsuported AD9361 revision 0x%x\n", rev);
++		rc = -ENODEV;
++		goto out;
++	}
++
++	dev_info(dev, "Detected AD9361 Rev 0x%x\n", rev);
++out:
++	return rc;
++}
++
++static int init_band_grps(struct device_node *np, struct ad_dev_info *phy_info)
++{
++	struct device *dev = &(phy_info->ad_spi->dev);
++	const void *val;
++	int i, j, rc = 0, size = 0;
++	const unsigned int *temp;
++	char *prop_name[] = {
++				"band_group1",
++				"band_group2",
++				"band_group3",
++				"band_group4",
++				};
++	char *prop_name1[] = {
++				"band_group_sniff1",
++				"band_group_sniff2",
++				"band_group_sniff3",
++				"band_group_sniff4",
++				};
++	char *prop_name2[] = {
++				"band_group_config1",
++				"band_group_config2",
++				"band_group_config3",
++				"band_group_config4",
++				};
++	for (i = 0; i < MAX_GPIO_CONFIGS; i++) {
++		temp = (unsigned int *)of_get_property(np, prop_name[i], &size);
++		if (!temp)
++			continue;
++		size /= sizeof(unsigned int);
++		phy_info->band_grp[i] = kmalloc(size * sizeof(unsigned int),
++						GFP_KERNEL);
++		phy_info->band_grp_size[i] = size;
++		for (j = 0; j < size; j++)
++			phy_info->band_grp[i][j] = temp[j];
++	}
++	for (i = 0; i < MAX_GPIO_CONFIGS; i++) {
++		temp = (unsigned int *)of_get_property(np, prop_name1[i],
++								&size);
++		if (!temp)
++			continue;
++		size /= sizeof(unsigned int);
++		phy_info->band_grp_sniff[i] = kmalloc(size *
++					sizeof(unsigned int), GFP_KERNEL);
++		phy_info->band_grp_sniff_size[i] = size;
++		for (j = 0; j < size; j++)
++			phy_info->band_grp_sniff[i][j] = temp[j];
++	}
++	for (i = 0; i < MAX_GPIO_CONFIGS; i++) {
++		rc = of_parse_phandles_with_args(np, prop_name2[i], "#num-val",
++						0, NULL, &val);
++		if (rc) {
++			dev_err(dev, "Inappropriate BandGroup config in dts\n");
++			goto out;
++		}
++		phy_info->band_grp_cfg[i][0] = (*(unsigned int *)val);
++		rc = of_parse_phandles_with_args(np, prop_name2[i], "#num-val",
++						1, NULL, &val);
++		if (rc) {
++			dev_err(dev, "Inappropriate BandGroup config in dts\n");
++			goto out;
++		}
++		phy_info->band_grp_cfg[i][1] = (*(unsigned int *)val);
++	}
++out:
++	return rc;
++}
++
++static int get_band_control_mode(struct device_node *np,
++			struct ad_dev_info *phy_info)
++{
++	struct device_node *child;
++	struct device *dev = &(phy_info->ad_spi->dev);
++	const void *val;
++	int rc = 0;
++
++	child = of_get_next_child(np, NULL);
++	if (of_get_property(child, "fpga", NULL)) {
++		phy_info->config_mode = FPGA_MODE;
++		rc = of_parse_phandles_with_args(child, "fpga", "#num-val",
++						0, NULL, &val);
++		if (rc) {
++			dev_err(dev, "Unable to obtain lane_id\n");
++			goto out;
++		}
++		phy_info->rf_num = (*(int *)val);
++	} else if (of_get_property(child, "gpios", NULL)) {
++		phy_info->config_mode = GPIO_MODE;
++	} else {
++		phy_info->config_mode = INVALID_MODE;
++		rc = -EINVAL;
++	}
++
++out:
++	return rc;
++}
++
++static int ad_init_gpio(struct device_node *child, struct device *dev,
++			struct ad_dev_info *phy_info)
++{
++	char *gpio_name;
++	int gpio, ret = 0;
++	u32 flags;
++
++	gpio_name = (char *) of_get_property(child, "label", NULL);
++	if (!gpio_name)
++		gpio_name = (char *) child->name;
++
++	gpio = of_get_gpio_flags(child, 0, &flags);
++	if (gpio < 0) {
++		dev_err(dev, "Could not get gpio for %s, err %d\n",
++			gpio_name, gpio);
++		ret = gpio;
++		goto out;
++	}
++
++	if (!strncmp(gpio_name, "reset", RIF_NAME_SIZE))
++		phy_info->reset_gpio = gpio;
++	else if (!strncmp(gpio_name, "pa_en", RIF_NAME_SIZE))
++		phy_info->pa_en_gpio = gpio;
++	else if (!strncmp(gpio_name, "lna_en", RIF_NAME_SIZE))
++		phy_info->lna_en_gpio = gpio;
++
++	ret = gpio_request(gpio, dev_name(dev));
++	if (ret) {
++		dev_dbg(dev, "gpio_request failed, gpio %s[%d]",
++				gpio_name, gpio);
++		goto out;
++	}
++
++	ret = gpio_direction_output(gpio, 0);
++	if (ret) {
++		dev_dbg(dev,
++			"gpio_direction_output failed, gpio %s[%d]",
++			gpio_name, gpio);
++		goto out;
++	}
++
++out:
++	return ret;
++}
++
++static void ad_reset_phy(struct ad_dev_info *phy_info, struct device *dev)
++{
++	switch (phy_info->config_mode) {
++	case FPGA_MODE:
++		reset_phy_via_fpga(phy_info->rf_num);
++		break;
++	case GPIO_MODE:
++		if ((phy_info->reset_gpio == GPIO_INVAL) ||
++			(phy_info->lna_en_gpio == GPIO_INVAL) ||
++			(phy_info->pa_en_gpio == GPIO_INVAL))
++			dev_info(dev, "Control GPIOs not intialized in dtb\n");
++
++		if ((!reset_status) && (phy_info->reset_gpio != GPIO_INVAL)) {
++			/* Toggle reset gpio to reset AD9361 */
++			gpio_set_value(phy_info->reset_gpio, 0);
++			gpio_set_value(phy_info->reset_gpio, 1);
++			reset_status = true;
++		}
++
++		break;
++	default:
++		dev_info(dev, "Invalid Band control mode\n");
++	}
++}
++
++static int ad_phy_probe(struct spi_device *spi)
++{
++	int i, ret = 0;
++	static struct rf_phy_dev *ad_phy;
++	struct device *dev = &spi->dev;
++	struct ad_dev_info *phy_info;
++	struct device_node *np = spi->dev.archdata.of_node, *child;
++
++	ad_phy = allocate_rf_phy_dev(sizeof(struct ad_dev_info), GFP_KERNEL);
++	if (!ad_phy) {
++		dev_dbg(dev, "Failed to allocate rf_phy_dev\n");
++		return -ENOMEM;
++	}
++
++	phy_info = (struct ad_dev_info *) ad_phy->priv;
++
++	phy_info->ad_spi = spi;
++	spi->bits_per_word = 8;
++
++	ad_phy->ops = &ad_phy_ops;
++
++	strncpy(&ad_phy->name[0], "ad9361", sizeof(ad_phy->name));
++	ad_phy->phy_id = (u32) np;
++
++	phy_info->reset_gpio = GPIO_INVAL;
++	phy_info->pa_en_gpio = GPIO_INVAL;
++	phy_info->lna_en_gpio = GPIO_INVAL;
++
++	if (get_band_control_mode(np, phy_info))
++		dev_info(dev, "Undefined band-control mode detected\n");
++
++	for_each_child_of_node(np, child) {
++		if (GPIO_MODE == phy_info->config_mode)
++			if (ad_init_gpio(child, dev, phy_info))
++				goto out;
++	}
++
++	if (INVALID_MODE != phy_info->config_mode) {
++		ret = init_band_grps(np, phy_info);
++		if (ret)
++			goto out;
++	}
++
++	ad_reset_phy(phy_info, dev);
++
++	dev_set_drvdata(&spi->dev, ad_phy);
++
++	ret = check_revision(ad_phy);
++	if (ret)
++		goto out;
++
++	ad_init_gain_tables(ad_phy);
++
++	/* If revision code is correct, Registering phy as a rf phy device. */
++	ret = register_rf_phy_dev(ad_phy);
++	if (ret) {
++		dev_dbg(dev, "register_rf_phy_dev failed.\n");
++		goto out;
++	}
++
++	rf_update_master_slave_status();
++	return ret;
++
++out:
++	if (phy_info->reset_gpio != GPIO_INVAL)
++		gpio_free(phy_info->reset_gpio);
++
++	if (phy_info->pa_en_gpio != GPIO_INVAL)
++		gpio_free(phy_info->pa_en_gpio);
++
++	if (phy_info->lna_en_gpio != GPIO_INVAL)
++		gpio_free(phy_info->lna_en_gpio);
++
++	for (i = 0; i < MAX_GPIO_CONFIGS; i++) {
++		kfree(phy_info->band_grp[i]);
++		kfree(phy_info->band_grp_sniff[i]);
++	}
++	free_rf_phy_dev(ad_phy);
++	return ret;
++}
++
++static struct spi_driver ad_phy_driver = {
++	.driver = {
++		.name = DRV_NAME,
++		.bus = &spi_bus_type,
++		.owner = THIS_MODULE,
++		},
++	.probe = ad_phy_probe,
++	.remove = __devexit_p(ad_phy_remove),
++
++};
++
++static int __init ad_phy_init(void)
++{
++	int ret;
++
++
++	ret = spi_register_driver(&ad_phy_driver);
++	if (ret != 0) {
++		pr_err("%s spi_register_driver failed with err %x\n",
++			__func__, ret);
++	}
++
++	return ret;
++}
++
++static void __exit ad_phy_exit(void)
++{
++	spi_unregister_driver(&ad_phy_driver);
++}
++
++module_init(ad_phy_init);
++module_exit(ad_phy_exit);
+diff --git a/drivers/rf/phy/ad9361.h b/drivers/rf/phy/ad9361.h
+new file mode 100644
+index 0000000..0637350
+--- /dev/null
++++ b/drivers/rf/phy/ad9361.h
+@@ -0,0 +1,353 @@
++/*
++ * drivers/rf/phy/ad9361.h
++ *
++ * Copyright 2011-2013 Freescale Semiconductor, Inc.
++ *
++ * This program is free software; you can redistribute  it and/or modify it
++ * under  the terms of  the GNU General  Public License as published by the
++ * Free Software Foundation;  either version 2 of the  License, or (at your
++ * option) any later version.
++ */
++
++#ifndef AD_PHY_H
++#define AD_PHY_H
++
++#define MAX_CARRIER_FREQ_KHZ	6000000
++#define MIN_CARRIER_FREQ_KHZ	47000
++
++/* For creating instruction word/command */
++#define OPCODE_WRITE 0x8000
++#define OPCODE_READ 0x0000
++#define BYTES_TRANSFER_MASK 0x7000
++#define SHIFT_BYTES_TRANSFER 12
++#define REG_ADDRESS_MASK 0x03FF
++#define COMMAND_MASK 0xFFFF0000
++#define COMMAND_LEN 2
++
++#define TRANSACTION_BYTES 3
++#define MAX_READ_TRANSACTION_SIZE 	8
++#define RXBUF_SIZE			10
++#define NUM_GPIOS			2
++#define MAX_GPIO_CONFIGS		(1 << NUM_GPIOS)
++#define GPIO_INVAL			(~0)
++
++#define BBPLL_LOCK_MASK 0x80
++#define PRODUCT_CODE_REG 0x37
++#define PRODUCT_ID_MASK 0x08
++#define PRODUCT_ID_9361 0x08
++#define REV_MASK	0x07
++
++/* Calibration status Registers */
++#define REG_CH1_OVERFLOW	0x05E
++#define REG_RX_CAL_STATUS	0x244
++#define REG_TX_CAL_STATUS	0x284
++#define REG_CALIBRATION_CONTROL	0x016
++#define REG_CALIBRATION_CONFIG1	0x169
++#define REG_RX_CP_CONFIG	0x23D
++#define REG_TX_CP_CONFIG	0x27D
++
++#define VAL_CAL_CONF1_TRACKOFF	0xC0
++
++/* Calibration status masks */
++#define MASK_BBPLL_LOCK		0x80
++#define MASK_RX_CP_CAL_VALID	0x80
++#define MASK_TX_CP_CAL_VALID	0x80
++#define MASK_RX_BB_TUNE		0x80
++#define MASK_TX_BB_TUNE		0x40
++#define MASK_DC_CAL_BBSTART	0x00
++#define MASK_DC_CAL_RFSTART	0x01
++#define MASK_TXQUAD_CAL		0x10
++
++/*
++ * 24 = 0x18 which is the AuxDAC1 word address
++ * 26 = 0x1A which is the AuxDAC1 config address
++ */
++#define DAC1_WORD 	24
++#define DAC1_CONFIG  	26
++
++/* TX Attenuation Registers */
++#define TX1_ATTEN0	0x073
++#define TX1_ATTEN1	0x074
++#define TX2_ATTEN0	0x075
++#define TX2_ATTEN1	0x076
++#define ATTEN0_MASK	0x000000FF
++#define ATTEN1_MASK	0x00000100
++#define ATTEN_MSB_BIT_MASK	0x01
++#define MSB_SHIFT	8
++
++#define TX_ENABLE	0x01
++#define TX_DISABLE	0x00
++#define TX_ENABLE_REG	0x002
++#define TX1_ENABLE_MASK	0x40
++#define TX2_ENABLE_MASK	0x80
++
++#define RX_ENABLE	0x01
++#define RX_DISABLE	0x00
++#define RX_ENABLE_REG	0x003
++#define RX1_ENABLE_MASK	0x40
++#define RX2_ENABLE_MASK	0x80
++
++#define RSSI_READBACK_REG 0x1A7
++#define RSSI_CONFIG_REG	0x158
++#define RSSI_DELAY_REG	0x156
++#define RSSI_MEAS_DUR_10_REG	0x150
++#define RSSI_MEAS_DUR_32_REG	0x151
++#define RSSI_WEIGHT0_REG	0x152
++#define RSSI_WEIGHT1_REG	0x153
++#define RSSI_WEIGHT2_REG	0x154
++#define RSSI_WEIGHT3_REG	0x155
++
++#define RSSI_MAX_WEIGHT		255
++#define RSSI_MEAS_MODE_MASK	0xE2
++#define RSSI_GAIN_CHANGE_EN_AGC_MODE	0x14
++/* RSSI delay reg value is decremented by RX sample rate divided by 8*/
++#define RSSI_DELAY_5MHZ		(256 / 8)
++#define RSSI_DELAY_10MHZ	(512 / 8)
++#define RSSI_DELAY_15MHZ	(768 / 8)
++#define RSSI_DELAY_20MHZ	(1024 / 8)
++
++#define SUBFRAME_SIZE_5MHZ	7680
++#define SUBFRAME_SIZE_10MHZ	15360
++#define SUBFRAME_SIZE_15MHZ	23040
++#define SUBFRAME_SIZE_20MHZ	30720
++
++/* For 9 bit RSSI symbol/preamble value RSSI is equivalent to 0.25dB/LSB.
++ * Since we can not do floating pt operations in kernel, we multiply
++ * Resolution with RSSI_MULTIPLER, and pass this multipler to user space
++ * which can convert rssi to floating pt again.
++ */
++#define RSSI_MULTIPLIER	100
++#define RSSI_RESOLUTION	((int) (0.25 * RSSI_MULTIPLIER))
++#define LSB_SHIFT	1
++#define RSSI_LSB_MASK1	0x01
++#define RSSI_LSB_MASK2	0x02
++
++#define REG_RXEN_N_FILTER_CTRL		0x003
++#define RX1_EN				0x40
++#define RX2_EN				0x80
++
++/* Gain index read/write register for MGC */
++#define REG_RX1_MGC_FULL_TBL_IDX	0x109
++#define REG_RX2_MGC_FULL_TBL_IDX	0x10c
++
++/* Gain Index read back registers. They are
++ * applicable for both AGC and MGC
++ */
++#define REG_RX1_FULL_TBL_IDX		0x2B0
++#define REG_RX1_LPF_GAIN_IDX		0x2B1
++#define REG_RX1_DIG_GAIN_IDX		0x2B2
++#define REG_RX2_FULL_TBL_IDX		0x2B5
++#define REG_RX2_LPF_GAIN_IDX		0x2B6
++#define REG_RX2_DIG_GAIN_IDX		0x2B7
++#define FULL_TBL_IDX_MASK		0x7f
++#define LPF_IDX_MASK			0x1f
++#define DIGITAL_IDX_MASK		0x1f
++#define MAX_LMT_INDEX			40
++#define MAX_LPF_GAIN			24
++#define MAX_DIG_GAIN			31
++
++#define REG_GAIN_TBL_ADDR		0x130
++#define REG_GAIN_TBL_READ_DATA1		0x134
++#define REG_GAIN_TBL_READ_DATA2		0x135
++#define REG_GAIN_TBL_READ_DATA3		0x136
++#define LNA_GAIN_MASK			0x60
++#define MIXER_GAIN_MASK			0x1F
++#define TIA_GAIN_MASK			0x20
++#define LNA_SHIFT			5
++#define MIXER_SHIFT			0
++#define TIA_SHIFT			5
++
++/*Fast attack state register*/
++#define REG_FAST_ATK_STATE		0x2B3
++#define FAST_ATK_MASK			0x7
++#define RX1_FAST_ATK_SHIFT		0
++#define RX2_FAST_ATK_SHIFT		4
++
++/*Fast attack state machine states*/
++#define FAST_ATK_RESET			0
++#define FAST_ATK_PEAK_DETECT		1
++#define FAST_ATK_PWR_MEASURE		2
++#define FAST_ATK_FINAL_SETTELING	3
++#define FAST_ATK_FINAL_OVER		4
++#define FAST_ATK_GAIN_LOCKED		5
++
++#define REG_AGC_CONF1			0x0FA
++
++#define RX_GAIN_CTL_MASK		0x03
++#define RX2_GAIN_CTL_SHIFT		2
++#define RX1_GAIN_CTL_SHIFT		0
++
++#define RX_GAIN_CTL_MGC				0x00
++#define RX_GAIN_CTL_AGC_FAST_ATK		0x01
++#define RX_GAIN_CTL_AGC_SLOW_ATK		0x02
++#define RX_GAIN_CTL_AGC_SLOW_ATK_HYBD		0x03
++#define SLOW_ATK_HYBD_BIT_EN			0x10
++
++#define REG_AGC_CONF2			0x0FB
++#define REG_MAX_LMT_FULL_GAIN		0x0FD
++#define FULL_GAIN_TBL			0x08
++#define DIGITAL_GAIN_EN			0x04
++
++#define RXGAIN_FULL_TBL_MAX_IDX		90
++#define RXGAIN_SPLIT_TBL_MAX_IDX	40
++
++/*ENSM config1 register*/
++#define REG_ENSM_CONF1			0x014
++#define ENSM_CONF1_TO_ALERT		(1 << 0)
++#define ENSM_CONF1_AUTO_GAIN_LOCK	(1 << 1)
++#define ENSM_CONF1_FORCE_ALERT		(1 << 2)
++#define ENSM_CONF1_LEVEL_MODE		(1 << 3)
++#define ENSM_CONF1_ENSM_PIN_CTL_EN	(1 << 4)
++#define ENSM_CONF1_FORCE_TX_ON		(1 << 5)
++#define ENSM_CONF1_FORCE_RX_ON		(1 << 6)
++#define ENSM_CONF_RX_EN_CAL		(1 << 7)
++
++/*ENSM state - Read only*/
++#define REG_DEV_STATE			0x017
++#define ENSM_STATE_SHIFT		0x0
++#define ENSM_STATE_MASK			0x0f
++
++#define ENSM_STATE_SLEEP_WAIT		0x0
++#define ENSM_STATE_ALERT		0x5
++#define ENSM_STATE_TX			0x6
++#define ENSM_STATE_TX_FLUSH		0x7
++#define ENSM_STATE_RX			0x8
++#define ENSM_STATE_RX_FLUSH		0x9
++#define ENSM_STATE_FDD			0xA
++#define ENSM_STATE_FDD_FLUSH		0xB
++#define ENSM_STATE_INVALID		0xff
++
++/* Synthesizer Registers */
++#define REG_RFPLL_DIVIDER		0x005
++#define REG_VCO_OUTPUT			0x23A
++#define REG_VCO_VARACTOR		0x239
++#define REG_VCO_BIAS1			0x242
++#define REG_FORCE_VCO_TUNE1		0x238
++#define REG_VCO_VARACTOR_CONTROL1	0x251
++#define REG_CP_CURRENT			0x23B
++#define REG_LOOP_FILTER1		0x23E
++#define REG_LOOP_FILTER2		0x23F
++#define REG_LOOP_FILTER3		0x240
++#define REG_INTEGER_BYTE0		0X231
++#define REG_INTEGER_BYTE1		0X232
++#define REG_FRACTIONAL_BYTE0		0X233
++#define REG_FRACTIONAL_BYTE1		0X234
++#define REG_FRACTIONAL_BYTE2		0X235
++#define REG_REF_DIVIDE_CONFIG1		0x2AB
++#define REG_REF_DIVIDE_CONFIG2		0x2AC
++
++#define RX_REG_OFFSET			0x000
++#define TX_REG_OFFSET			0x040
++
++#define RX_SCALER_MASK1			0x01
++#define RX_SCALER_MASK2			0x80
++#define TX_SCALER_MASK			0x0C
++
++#define DEVICE_REF_FREQ_KHZ		19200
++#define RFPLL_MODULUS			8388593
++
++#define MASK_VCO_OUTPUT			0xF0
++#define MASK_VCO_VARACTOR		0xF0
++#define MASK_VCO_BIAS1			0xE0
++#define MASK_FORCE_VCO_TUNE1		0x87
++#define MASK_VCO_VARACTOR_CONTROL1	0xF0
++#define MASK_CP_CURRENT			0xC0
++#define MASK_LOOP_FILTER3		0xF0
++#define MASK_FRAC_B0			0xff
++#define MASK_FRAC_B1			0xff00
++#define MASK_FRAC_B2			0xff0000
++#define MASK_INT_B0			0xff
++#define MASK_INTEGER_REG1		0xf8
++#define MASK_INT_B1			0x700
++#define SHIFT_FRAC_B0			0
++#define SHIFT_FRAC_B1			8
++#define SHIFT_FRAC_B2			16
++#define SHIFT_INT_B1			8
++#define SHIFT_VCO_CAL_OFFSET		3
++#define SHIFT_VCO_BIAS_TCF		3
++#define SHIFT_LOOP_FILTER_C2		4
++#define SHIFT_LOOP_FILTER_R1		4
++
++/* Master/Slave configuartion register */
++#define REG_GPO_FORCE_INIT		0x027
++#define GPO3_MANUAL_CONTROL		0x80
++
++enum rx_gain_table_type {
++	RXGAIN_FULL_TBL,
++	RXGAIN_SPLIT_TBL,
++};
++
++enum rx_gain_table_name {
++	FULL_TBL_200_1300_MHZ,
++	FULL_TBL_1300_4000_MHZ,
++	FULL_TBL_4000_6000_MHZ,
++	RXGAIN_TBLS_END,
++};
++
++enum rf_synth_regs {
++	VCO_Output_Level,
++	VCO_Varactor,
++	VCO_Bias_Ref,
++	VCO_Bias_Tcf,
++	VCO_Cal_Offset,
++	VCO_Varactor_Reference,
++	Charge_Pump_Current,
++	Loop_Filter_C2,
++	Loop_Filter_C1,
++	Loop_Filter_R1,
++	Loop_Filter_C3,
++	Loop_Filter_R3
++};
++
++enum rf_synth_params {
++	Band,
++	Reference_Frequency,
++	Loop_Bandwidth,
++	Index,
++	VCO_Frequency,
++	VCO_Kv
++};
++
++enum rf_synthesizer {
++	RF_RX,
++	RF_TX,
++	RF_BBPLL
++};
++
++struct rx_gain_info {
++	enum rx_gain_table_type tbl_type;
++	int starting_gain_db;
++	int max_gain_db;
++	int gain_step_db;
++	int max_idx;
++	int idx_step_offset;
++};
++
++enum band_config_mode {
++	GPIO_MODE,
++	FPGA_MODE,
++	INVALID_MODE
++};
++
++struct ad_dev_info {
++	struct spi_device *ad_spi;
++	u8 rx_buf[10];
++	u8 prev_ensm_state;
++	int ensm_pin_ctl_en;
++	unsigned int freq_band;
++	enum rf_network_mode net_mode;
++	enum band_config_mode config_mode;
++	struct rx_gain_info rx_gain[RXGAIN_TBLS_END];
++	struct	rf_synth_table synth_table;
++	int reset_gpio;
++	int pa_en_gpio;
++	int lna_en_gpio;
++	int rf_num;
++	unsigned int *band_grp[4];
++	unsigned int band_grp_size[4];
++	unsigned int *band_grp_sniff[4];
++	unsigned int band_grp_sniff_size[4];
++	unsigned int band_grp_cfg[4][2];
++};
++
++#endif /* AD_PHY_H */
+diff --git a/drivers/rf/phy/tdd_int.c b/drivers/rf/phy/tdd_int.c
+new file mode 100644
+index 0000000..ca58892
+--- /dev/null
++++ b/drivers/rf/phy/tdd_int.c
+@@ -0,0 +1,142 @@
++/*
++ * drivers/rf/phy/tdd_int.c
++ * Freescale TDD Interposer driver
++ *
++ * This driver provides interface to enable the interposer card connected to
++ * SPI bus for BSC9131 platform.
++ * Author: Akhil Goyal <akhil.goyal@freescale.com>
++ *
++ * Copyright 2013 Freescale Semiconductor, Inc.
++ *
++ * This program is free software; you can redistribute  it and/or modify it
++ * under  the terms of  the GNU General  Public License as published by the
++ * Free Software Foundation;  either version 2 of the  License, or (at your
++ * option) any later version.
++ */
++
++#include <linux/kernel.h>
++#include <linux/spi/spi.h>
++#include <linux/rfdev.h>
++#include "tdd_int.h"
++
++#define DRV_NAME "tdd_int"
++
++struct tdd_int_dev_info *int_info;
++
++static int int_spi_write_transaction(u8 *buf, int len)
++{
++	u8 *tx_buf;
++	int status;
++	struct spi_message spi_msg;
++	struct spi_transfer int_tx;
++
++	spi_message_init(&spi_msg);
++	memset(&int_tx, 0, sizeof(int_tx));
++
++	tx_buf = buf;
++	int_tx.len = len;
++	int_tx.tx_buf = &tx_buf[0];
++	int_tx.rx_buf = &(int_info->rx_buf[0]);
++
++	pr_debug("\nint_tx.len: %d, int_tx.txbuf: %Lx\n",
++			int_tx.len, *((u64 *)(int_tx.tx_buf)));
++	spi_message_add_tail(&int_tx, &spi_msg);
++	pr_debug("\nspi_chip select: %u\n", int_info->int_spi->chip_select);
++	status = spi_sync(int_info->int_spi, &spi_msg);
++
++	return status;
++}
++
++
++int enable_tdd_int(enum rf_txrxmode mode)
++{
++	int rc;
++	u32 cmd[2] = {0};
++	u16 addr = INTERPOSER_EN_REG;
++	u32 data = 0x0;
++
++	if (mode == TXRX_1T1R)
++		data = INTERPOSER_EN | SINGLE_ANTENNA_EN;
++	else if (mode == TXRX_2T2R)
++		data = INTERPOSER_EN | BOTH_ANTENNA_EN;
++	pr_debug("Interposer's register write call.\n");
++	/*
++	 * |---- ----32 bits---- ----|---- ----32 bits---- ----|
++	 *           cmd[0]          |         cmd[1]
++	 *  addr(15 bits only) +     | LSB of data(16 bits)
++	 *      MSB of data(16 bits) |
++	 *                           | 1t1r 0x00010000
++	 *                           |          / \
++	 *                           |          0 1
++	 *                           | 2t2r 0x00030000
++	 *                           |          / \
++	 *                           |          1 1
++	 *                           |         /   \
++	 *                           |  Antenna    FPGA
++	 *                           |  select     Enable
++	 *  Only 48 bits are useful of 64 bits cmd
++	 */
++	cmd[0] = ((addr & 0x7FFF) << 16) | (data >> 16);
++	cmd[1] = (data << 16);
++	pr_debug("\nfirst word : 0x%x, 0x%x, \n", cmd[0], cmd[1]);
++	rc = int_spi_write_transaction((u8 *)&cmd, 6);
++
++	pr_debug("\nrc:%d\n", rc);
++	return rc;
++}
++EXPORT_SYMBOL(enable_tdd_int);
++
++static int tdd_int_probe(struct spi_device *spi)
++{
++	int_info = kzalloc(sizeof(struct tdd_int_dev_info), GFP_KERNEL);
++	if (!int_info) {
++		pr_err("Failed to allocate tdd_interposer_dev\n");
++		return -ENOMEM;
++	}
++
++	pr_info("\n*TDD FPGA/INTERPOSER initialized *\n");
++
++	int_info->int_spi = spi;
++	int_info->dev = &spi->dev;
++	spi->bits_per_word = 8;
++
++	return 0;
++}
++
++static int tdd_int_remove(struct spi_device *spi)
++{
++	kfree(int_info);
++	return 0;
++}
++
++static struct spi_driver tdd_int_driver = {
++	.driver = {
++		.name = DRV_NAME,
++		.bus = &spi_bus_type,
++		.owner = THIS_MODULE,
++		},
++	.probe = tdd_int_probe,
++	.remove = __devexit_p(tdd_int_remove),
++};
++
++static int __init tdd_interposer_init(void)
++{
++	int ret;
++
++	ret = spi_register_driver(&tdd_int_driver);
++	if (ret != 0) {
++		pr_err("%s spi_register_driver failed with err %x\n",
++			__func__, ret);
++	}
++
++	return ret;
++}
++
++static void __exit tdd_interposer_exit(void)
++{
++	spi_unregister_driver(&tdd_int_driver);
++}
++
++module_init(tdd_interposer_init);
++module_exit(tdd_interposer_exit);
++
+diff --git a/drivers/rf/phy/tdd_int.h b/drivers/rf/phy/tdd_int.h
+new file mode 100644
+index 0000000..f7f6768
+--- /dev/null
++++ b/drivers/rf/phy/tdd_int.h
+@@ -0,0 +1,29 @@
++/*
++ * drivers/rf/phy/tdd_int.h
++ *
++ * Copyright 2013 Freescale Semiconductor, Inc.
++ *
++ * This program is free software; you can redistribute  it and/or modify it
++ * under  the terms of  the GNU General  Public License as published by the
++ * Free Software Foundation;  either version 2 of the  License, or (at your
++ * option) any later version.
++ */
++
++#ifndef TDD_INT_H
++#define TDD_INT_H
++
++/* For creating instruction word/command */
++#define INTERPOSER_EN		0x1
++#define INTERPOSER_EN_REG	0x0
++#define BOTH_ANTENNA_EN		0x2
++#define SINGLE_ANTENNA_EN	0x0
++
++struct tdd_int_dev_info {
++	struct spi_device *int_spi;
++	struct device *dev;
++	u8 rx_buf[10];
++};
++
++int enable_tdd_int(enum rf_txrxmode mode);
++
++#endif /* TDD_INT_H */
+diff --git a/include/linux/rf_channel.h b/include/linux/rf_channel.h
+new file mode 100644
+index 0000000..408aabf
+--- /dev/null
++++ b/include/linux/rf_channel.h
+@@ -0,0 +1,26 @@
++/*
++ * RF device Data channels
++ *
++ * Author: pankaj chauhan <pankaj.chauhan@freescale.com>
++ *
++ * Copyright 2011-2012 Freescale Semiconductor, Inc.
++ *
++ * This program is free software; you can redistribute  it and/or modify it
++ * under  the terms of  the GNU General  Public License as published by the
++ * Free Software Foundation;  either version 2 of the  License, or (at your
++ * option) any later version.
++ */
++
++struct rf_frame {
++	int ant;
++	union {
++		void *buffer;
++		u32 buffer_idx;
++	} buf;
++};
++
++int rf_channel_open(struct rf_ctrl_dev *rf_dev,
++	struct rf_channel_params *chan_params);
++int rf_channel_close(struct rf_ctrl_dev *rf_dev, int ant);
++int rf_rx_frame(struct rf_ctrl_dev *rf_dev, struct rf_frame *frame);
++int rf_sniff_done(struct rf_ctrl_dev *rf_dev, int ant);
+diff --git a/include/linux/rfdev.h b/include/linux/rfdev.h
+new file mode 100644
+index 0000000..993f42f
+--- /dev/null
++++ b/include/linux/rfdev.h
+@@ -0,0 +1,258 @@
++/*
++ * RF device framework
++ *
++ * Author: pankaj chauhan <pankaj.chauhan@freescale.com>
++ *
++ * Copyright 2011-2013 Freescale Semiconductor, Inc.
++ *
++ * This program is free software; you can redistribute  it and/or modify it
++ * under  the terms of  the GNU General  Public License as published by the
++ * Free Software Foundation;  either version 2 of the  License, or (at your
++ * option) any later version.
++ */
++
++#ifndef __RFDEV_H__
++#define __RFDEV_H__
++
++#include <linux/time.h>
++#include <linux/rfdev_ioctl.h>
++#include <linux/wait-simple.h>
++#include <linux/list.h>
++#include <asm/atomic.h>
++
++#define TTI_LOG_SIZE	10
++
++enum rf_evt_del {
++	DEL_CUR_EVT,
++	DEL_ALL_EVT
++};
++
++struct rf_stats {
++	unsigned int tti_count;
++	struct timeval tti_ts[TTI_LOG_SIZE];
++};
++
++struct rf_dev_params {
++	unsigned int ants;
++	unsigned int symbol_len;
++	unsigned int long_cp;
++	unsigned int cp0_len;
++	unsigned int cp1_len;
++	/*Frame structure*/
++	unsigned int subfrm_per_frm;
++	unsigned int slots_per_subfrm;
++	unsigned int chips_per_slot;
++	unsigned int symbols_per_slot;
++	/*TDD frame structure*/
++	char tdd_dl_ul_conf[LTE_SUBFRM_PER_FRM];
++	unsigned int tdd_dwpts;
++	unsigned int tdd_uppts;
++};
++
++struct rf_dev_sniffer {
++	enum rf_network_mode 	net_mode;
++	enum rf_txrxmode 	tx_rxmode;
++	enum rf_timer_src	timing_src;
++	enum rf_band_width 	bw;
++	unsigned long carrier_freq;
++};
++
++struct rf_channel_stats {
++	int tx_frame_count;
++	int tx_err;
++	int rx_frame_count;
++	int rx_err;
++};
++
++
++/**
++ * struct rf_mmaped_bufs - Memory mapped channel buffers,
++ * They are used when channel is opened using RF_CHANNEL_MMAPED
++ * flag. User space will provide mmaped buffer in this case.
++ *
++ * @ tx/rx_base : Virtual address of tx/rx buffer base. User
++ *   space will provide the physical address while opening channel
++ *   and rfdev frame work may ioremap it to store virtual address
++ *   in tx/rx_base.
++ * @ tx/rx_phys : Physical address of tx/rx buffer base.
++ * @ tx_curr_idx : Current index at which tx data has been written.
++ * @ rx_curr_idx : Current index at which rx data has been written.
++ *
++ */
++struct rf_mmaped_bufs {
++	u32 tx_base;
++	u32 rx_base;
++	u32 tx_base_phys;
++	u32 rx_base_phys;
++	unsigned int tx_curr_idx;
++	unsigned int rx_curr_idx;
++};
++
++struct rf_channel {
++	unsigned int ant;
++	struct rf_ctrl_dev *dev;
++	void *priv;
++	raw_spinlock_t	lock;
++	u32 flags;
++	unsigned int tx_buf_size;
++	unsigned int rx_buf_size;
++	union {
++		struct rf_mmaped_bufs mmap_bufs;
++		/* For non mmaped bufs, buf queues
++		 * should be added here in this union
++		 * only
++		 */
++	} bufs;
++	struct rf_channel_stats stats;
++};
++
++struct rf_event_handler {
++	struct list_head list;
++	u16 evt_mask;
++	struct pid *pid;
++	struct siginfo siginfo;
++};
++
++
++struct rf_ctrl_dev {
++	char			name[RIF_NAME_SIZE];
++	enum rf_state		state;
++	enum rf_state		old_state;
++	enum rf_network_mode 	net_mode;
++	enum rf_txrxmode 	tx_rxmode;
++	enum rf_timer_src	timing_src;
++	enum rf_band_width 	bw;
++	enum rf_lane_mode 	mode;
++	struct rf_dev_params	dev_params;
++	struct rf_channel	*channels[MAX_NUM_ANTENNAS];
++	struct list_head	event_handler_list;
++	spinlock_t		event_handler_lock;
++	struct rf_dev_sniffer   sniffer;
++	int			sniff_enabled;
++	int			data_chans_enabled;
++	int			dev_idx;
++	u32			phy_id;
++	void 			*priv;
++	struct rf_ctrl_ops	*ops;
++	struct rf_phy_dev	*phy;
++	atomic_t		ref;
++	struct swait_head	wait_q;
++	struct list_head	list;
++	struct mutex		lock;
++	struct rf_stats		stats;
++	struct rf_ctrl_dev 	*rf_master;
++	unsigned int		frame_count0;
++	unsigned int		frame_count1;
++	int			rftimer_started;
++};
++
++struct rf_phy_dev {
++	char	name[RIF_NAME_SIZE];
++	void	*priv;
++	u32	phy_id;
++	u32	tx_atten[MAX_NUM_ANTENNAS];
++	unsigned long dl_carrier_freq;
++	unsigned long ul_carrier_freq;
++	struct	rf_phy_ops *ops;
++	struct  rf_ctrl_dev *ctrl_dev;
++	struct	list_head list;
++};
++
++enum rf_lane_active {
++	LANE_ONE,
++	LANE_TWO,
++	LANE_THREE,
++	LANE_FOUR
++};
++
++struct rf_dev_lane_map {
++	u32	phy_id;
++	unsigned int lane_id;
++	enum rf_state state;
++};
++
++struct rf_phy_ops {
++	int	(*init)(struct rf_phy_dev *phy,
++				struct rf_init_params *params);
++
++	int	(*set_timer_correction)(struct rf_phy_dev *phy,
++			 struct rif_dac_params *params);
++
++	int	(*read_dac_value)(struct rf_phy_dev *phy,
++				u32 correction_type, u32 *buf);
++
++	int	(*run_cmds)(struct rf_phy_dev *phy,
++				struct rif_phy_cmd *cmds, int count);
++
++	int	(*read_regs)(struct rf_phy_dev *phy, u32 start,
++				u32 count, u32 *buff);
++
++	int 	(*write_reg)(struct rf_phy_dev *phy, u32 reg,u32 data);
++	int	(*set_tx_atten)(struct rf_phy_dev *phy, u32 reg, u32 data);
++	int	(*en_dis_tx)(struct rf_phy_dev *phy, u32 tx_if, u32 cmd);
++	int	(*read_rssi)(struct rf_phy_dev *phy, struct rf_rssi *rssi);
++	int	(*get_rx_gain)(struct rf_phy_dev *phy,
++			struct rf_rx_gain *rx_gain);
++	int	(*set_rx_gain)(struct rf_phy_dev *phy,
++			struct rf_rx_gain *rx_gain);
++	int	(*start)(struct rf_phy_dev *phy);
++	int	(*stop)(struct rf_phy_dev *phy);
++	int	(*config_sniff) (struct rf_phy_dev *ad_phy,
++			struct rf_sniff_params *sniff_params);
++	int	(*set_gain_ctrl_mode)(struct rf_phy_dev *phy,
++			struct rf_gain_ctrl *gain_ctrl);
++	int	(*save_synth_table)(struct rf_phy_dev *phy,
++			struct rf_synth_table *synth_table);
++	int	(*config_master_slave)(unsigned int lane_id,
++			struct rf_phy_dev *phy, enum rf_lane_mode mode);
++};
++
++struct rf_ctrl_ops {
++
++	int	(*init)(struct rf_ctrl_dev *ctrl_dev,
++				struct rf_init_params *params);
++
++	int	(*set_timing_source)(struct rf_ctrl_dev *ctrl_dev,
++			unsigned int pps_src);
++
++	int	(*read_regs)(struct rf_ctrl_dev *ctrl_dev, u32 start,
++				u32 count, u32 *buff);
++
++	int 	(*write_reg)(struct rf_ctrl_dev *ctrl_dev, u32 reg, u32 data);
++	int	(*phy_detach)(struct rf_ctrl_dev *ctrl_dev);
++	int	(*start)(struct rf_ctrl_dev *ctrl_dev);
++	int	(*stop)(struct rf_ctrl_dev *ctrl_dev);
++	int	(*config_sniff) (struct rf_ctrl_dev *ctrl_dev,
++			struct rf_sniff_params *sniff_params);
++	int	(*channel_open) (struct rf_ctrl_dev *ctrl_dev,
++			struct rf_channel *chan);
++	int	(*channel_close) (struct rf_ctrl_dev *ctrl_dev,
++			struct rf_channel *chan);
++};
++
++struct	rf_ctrl_dev *allocate_rf_ctrl_dev(size_t priv_size,
++			unsigned long flags);
++int 	free_rf_ctrl_dev(struct rf_ctrl_dev *rf_dev);
++int	register_rf_ctrl_dev(struct rf_ctrl_dev *rf_dev);
++int	unregister_rf_ctrl_dev(struct rf_ctrl_dev *rf_dev);
++
++struct  rf_phy_dev *allocate_rf_phy_dev(size_t priv_size,
++		unsigned long flags);
++int	free_rf_phy_dev(struct rf_phy_dev *phy);
++int	register_rf_phy_dev(struct rf_phy_dev *phy_dev);
++int	unregister_rf_phy_dev(struct rf_phy_dev *phy_dev);
++int	rf_notify_dl_tti(struct rf_ctrl_dev *rf_dev);
++int rf_send_event(struct rf_ctrl_dev *rf_dev,
++	struct rf_event_handler *evt_handler, u16 evt);
++int	rf_update_master_slave_status(void);
++int	aic_get_lane_id(struct rf_ctrl_dev *rf_dev);
++
++#define SVR_9131		0x86000010
++#define SVR_SECURE_MASK		0x00080000
++#define SVR_9131_REV1		0x86000011
++#define SVR_9131S		0x86080010
++#define SVR_9131S_REV1		0x86080011
++#define SVR_9132S		0x86180010
++#define SVR_9132S_REV1		0x86180011
++
++#endif
+diff --git a/include/linux/rfdev_ioctl.h b/include/linux/rfdev_ioctl.h
+new file mode 100644
+index 0000000..9fabbba
+--- /dev/null
++++ b/include/linux/rfdev_ioctl.h
+@@ -0,0 +1,393 @@
++/*
++ * Copyright 2011-2012 Freescale Semiconductor, Inc.
++ *
++ * RF device framework
++ *
++ * Author: Pankaj Chauhan  <pankaj.chauhan@freescale.com>
++ *
++ *  This software is available to you under a choice of one of two
++ * licenses.  You may choose to be licensed under the terms of the GNU
++ * General Public License (GPL) Version 2, available from the file
++ * COPYING in the main directory of this source tree, or the BSD-type
++ * license below:
++ *
++ * Redistribution and use in source and binary forms, with or without
++ * modification, are permitted provided that the following conditions are met:
++ *
++ * 1. Redistributions of source code must retain the above copyright
++ *    notice, this list of conditions and the following disclaimer.
++ * 2. Redistributions in binary form must reproduce the above copyright
++ *    notice, this list of conditions and the following disclaimer in the
++ *    documentation and/or other materials provided with the distribution.
++ * 3. Neither the names of the copyright holders nor the names of its
++ *    contributors may be used to endorse or promote products derived from
++ *    this software without specific prior written permission.
++ *
++ *
++ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
++ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
++ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
++ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
++ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
++ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
++ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
++ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
++ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
++ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
++ * POSSIBILITY OF SUCH DAMAGE.
++ */
++
++#ifndef __RFDEV_IOCTL_H__
++#define __RFDEV_IOCTL_H__
++
++#include <linux/types.h>
++
++#define RIF_NAME_SIZE	20
++#define RF_MAX_DEVS	6
++#define MAX_NUM_ANTENNAS	4
++#define PPS_TIMEOUT		4 /* seconds */
++#define NUM_SYNTH_PARAMS	6
++#define NUM_SYNTH_REGS		12
++#define LTE_SUBFRM_PER_FRM	10
++#define TIME_SYNC_NL_GROUP	1
++
++enum rf_network_mode {
++	LTE_TDD,
++	LTE_FDD,
++	WCDMA_FDD,
++	NET_MODE_END
++};
++
++enum rf_txrxmode {
++	TXRX_1T1R,
++	TXRX_1T2R,
++	TXRX_2T2R,
++	TXRX_MODE_END
++};
++
++enum rf_band_width {
++	BW_05_MHZ,
++	BW_10_MHZ,
++	BW_15_MHZ,
++	BW_20_MHZ,
++	BW_END
++};
++
++enum spi_cmd {
++	SPI_WRITE = 1,
++	SPI_READ,
++	SPI_WAIT,
++	SPI_WAIT_BBPLL_CAL,
++	SPI_WAIT_RXCP_CAL,
++	SPI_WAIT_TXCP_CAL,
++	SPI_WAIT_RXFILTER_CAL,
++	SPI_WAIT_TXFILTER_CAL,
++	SPI_WAIT_BBDC_CAL,
++	SPI_WAIT_RFDC_CAL,
++	SPI_WAIT_TXQUAD_CAL,
++	SPI_WAIT_CALDONE,
++	SPI_END
++};
++
++enum rf_state {
++	RF_CREATED,
++	RF_PHY_ATTACHED,
++	RF_STOPPED,
++	RF_PHY_INITIALIZED,
++	RF_INITIALIZED,
++	RF_TIMER_SYNC_AWAITED,
++	RF_TIMER_SYNC_FAILED,
++	RF_READY,
++	RF_DOWN,
++	RF_SNIFFING,
++	RF_STATE_END
++};
++
++enum rf_gain_ctrl_mode {
++	MGC,
++	FASTATTACK_AGC,
++	SLOWATTACK_AGC,
++	HYBRID_AGC
++};
++
++enum tmsyn_event {
++	TIME_SYNC_EVT_NONE,           /* no event */
++	TIME_SYNC_EVT_AD_DIS,  /* admin disable/stop */
++	TIME_SYNC_EVT_AD_ENAB, /* admin enable/start */
++	TIME_SYNC_EVT_TIMEINFO_RX,  /* timing info rxed */
++	TIME_SYNC_EVT_TIMEINFO_MISS, /* timing info missed */
++	TIME_SYNC_EVT_TIMEINFO_BO /* timing info blackout */
++};
++
++struct rf_synth_table {
++	unsigned long long (*params)[NUM_SYNTH_PARAMS];
++	__u8 (*reg_vals)[NUM_SYNTH_REGS];
++	unsigned int count;
++};
++
++enum lte_tdd_subfrms {
++	DL = 1,
++	UL,
++	SPL,
++	END
++};
++
++struct rf_init_params {
++	enum rf_network_mode mode;
++	enum rf_txrxmode tx_rxmode;
++	enum rf_band_width bw;
++	unsigned int fq_band;
++	int tdd_dl_ul_conf[LTE_SUBFRM_PER_FRM];
++	unsigned int tdd_dwpts;
++	unsigned int tdd_uppts;
++	unsigned int tdd_gp;
++	unsigned int long_cp;
++	unsigned int ants;
++	unsigned int capture_enabled;
++	__u16 dl_delay;
++	__u16 ul_delay;
++	unsigned long ul_freq_khz;
++	unsigned long dl_freq_khz;
++};
++
++enum rf_timer_src {
++	RF_PPS_SRC_GPS = 1,
++	RF_PPS_SRC_RAW_GPS,
++	RF_PPS_SRC_PTP,
++	RF_PPS_SRC_NLM,
++	RF_PPS_SRC_END
++};
++
++enum rf_lane_mode {
++	MASTER,
++	SLAVE,
++	RF_LANE_END
++};
++
++struct rf_sniff_params {
++	struct rf_init_params dev_params;
++	unsigned long carrier_freq;
++	enum rf_timer_src timing_src;
++	unsigned int capture_duration;
++};
++
++struct rf_dev_info {
++	char controller[RIF_NAME_SIZE];
++	char phy[RIF_NAME_SIZE];
++	enum rf_state state;
++	enum rf_state master_state;
++	enum rf_lane_mode mode;
++	enum rf_network_mode net_mode;
++	enum rf_txrxmode tx_rxmode;
++	enum rf_band_width bw;
++	enum rf_timer_src timing_src;
++	int sniff_enabled;
++	enum rf_network_mode 	sniff_net_mode;
++	enum rf_txrxmode 	sniff_tx_rxmode;
++	enum rf_timer_src	sniff_timing_src;
++	enum rf_band_width 	sniff_bw;
++	unsigned long		sniff_carrier_freq;
++	unsigned long		dl_carrier_freq;
++	unsigned long		ul_carrier_freq;
++	unsigned int ants;
++	unsigned int symbol_len;
++	unsigned int long_cp;
++	unsigned int cp0_len;
++	unsigned int cp1_len;
++	unsigned int tx_atten[MAX_NUM_ANTENNAS];
++};
++
++#define RF_CHAN_MMAPED			0x00000001
++#define RF_CHAN_DIR_TX			0x00000002
++#define RF_CHAN_DIR_RX			0x00000004
++#define RF_CHAN_XFER_MODE_LTE		0x00000008
++#define RF_CHAN_XFER_MODE_SNIFF		0x00000010
++#define RF_CHAN_PER_FRAME_EVENT		0x00000020
++#define RF_CHAN_ASYNC			0x00000040
++
++/**
++ * struct rf_channel_params: RF data channel parameters
++ * @ ant: Atnenna for which the channel will tx/rx IQ data
++ * @ flags: Channel flags, see the flag #defs
++ * @ tx_buf_size: Size of Tx buffer
++ * @ rx_buf_size: Size of Rx buffer
++ * @ tx_base_phys: Tx buffer base physical address. This is valid
++ *   in case rf channel is mmaped (RF_CHAN_MMAPED)
++ * @ rx_base_phys: Rx buffer base physical address. This is valid
++ *   in case of rf channel is mmaped (RF_CHAN_MMAPED)
++ */
++struct rf_channel_params {
++
++	unsigned int ant;
++	__u32 flags;
++	unsigned int tx_buf_size;
++	unsigned int rx_buf_size;
++	__u32 tx_base_phys;
++	__u32 rx_base_phys;
++};
++
++struct rif_phy_cmd {
++	enum spi_cmd	cmd;
++	__u32	param1;
++	__u32	param2;
++	__u32	param3;
++};
++
++struct rif_phy_cmd_set {
++	struct rif_phy_cmd *cmds;
++	unsigned int count;
++};
++
++struct rif_reg_buf {
++	__u32 addr;
++	void *buf;
++	unsigned int count;
++};
++
++struct rif_write_reg_buf {
++	__u32 addr;
++	__u32 data;
++};
++
++struct time_sync_1588_cnt {
++	__u32 high;
++	__u32 low;
++};
++
++struct time_info {
++	struct time_sync_1588_cnt time_cnt;
++	enum tmsyn_event event;
++};
++
++enum tmsyn_correction_mode {
++	TMSYN_CORR_MODE_DAC,
++	TMSYN_CORR_MODE_ADDEND,
++	TMSYN_CORR_MODE_DAC_ADDEND,
++	TMSYN_CORR_END
++};
++
++struct time_sync_data {
++	enum tmsyn_correction_mode correction_mode;
++	__u8 sync_source;
++	__u32 lte_delay;
++	__u32 ioctl_cmd;
++	__u32 black_out_duration;
++	struct time_info time_info;
++};
++
++struct rif_dac_params {
++	__u32 correction_type;
++	__u32 correction_value;
++};
++
++struct rif_dac_buf {
++	__u32 correction_type;
++	__u32 *buf;
++};
++
++struct rf_tx_buf {
++	__u32 tx_if;
++	__u32 tx_atten;
++};
++
++struct rf_tx_en_dis {
++	__u32 tx_if;
++	__u32 tx_cmd;
++};
++
++struct rf_rssi {
++	__u32 ant;
++	__u32 symbol;
++	__u32 preamble;
++	__u8 duration;
++	int multiplier;
++};
++
++struct rf_rx_gain {
++	int ant;
++	int gain_db;
++	unsigned int lmt_index;
++	unsigned int lmt_gain;
++	unsigned int lpf_gain;
++	unsigned int digital_gain;
++};
++
++struct rf_gain_ctrl {
++	int ant;
++	enum rf_gain_ctrl_mode mode;
++};
++
++/* RF EVENTS: These Events are notifications
++ * sent from kernel rf device f/w to user space
++ */
++struct rf_event_listener {
++	__u16 evt_mask;
++	unsigned int signal;
++};
++
++#define RF_EVT_ARG_SHIFT	0
++#define RF_EVT_ARG_MASK		0xfff
++#define RF_EVT_CHAN_SHIFT	12
++#define RF_EVT_CHAN_MASK	0x3
++#define RF_EVT_CMD_SHIFT	14
++#define RF_EVT_CMD_MASK		0xffff
++
++/* RF_EVENTS: Maximum 16 events as event bitmask is 16 bits
++ * For defining new event, pick any unused bit
++ */
++#define RF_EVT_RX_FRAME		0x0001
++#define RF_EVT_SNIFF_DONE	0x0002
++
++#define RF_EVT_ALL	(RF_EVT_RX_FRAME | RF_EVT_SNIFF_DONE)
++#define RF_MAKE_EVENT(evt, chan, arg)( \
++			((evt & RF_EVT_CMD_MASK) << RF_EVT_CMD_SHIFT) | \
++			((chan & RF_EVT_CHAN_MASK) << RF_EVT_CHAN_SHIFT) | \
++			((arg & RF_EVT_ARG_MASK) << RF_EVT_ARG_SHIFT))
++
++#define RF_EVENT_GET_CMD(evt) ((evt >> RF_EVT_CMD_SHIFT) & RF_EVT_CMD_MASK)
++#define RF_EVENT_GET_CHAN(evt) ((evt >> RF_EVT_CHAN_SHIFT) & RF_EVT_CHAN_MASK)
++#define RF_EVENT_GET_ARG(evt) ((evt >> RF_EVT_ARG_SHIFT) & RF_EVT_ARG_MASK)
++
++enum dac_correction_type {
++	FINE_CORRECTION = 1,
++	COARSE_CORRECTION,
++};
++
++#define TIMING_SYNC_INIT	0x00000001
++#define TIMING_SYNC_START	0x00000002
++#define TIMING_SYNC_STOP	0x00000004
++#define TIMING_SYNC_GET_TIME	0x00000010
++
++#define FREQ_INVALID      	0xffffffff
++#define TS_DELTA_INVALID      	0xffffffff
++#define TIMESTAMP_INVALID	0xffffffffffffffffll
++
++#define RF_MAGIC 'R'
++#define RIF_DEV_INIT		_IOWR(RF_MAGIC, 1, struct rf_init_params*)
++#define RIF_SET_TIMER_SOURCE	_IOW(RF_MAGIC, 2, unsigned int)
++#define RIF_GET_STATE		_IOR(RF_MAGIC, 3, unsigned int)
++#define RIF_SET_TIMER_CORRECTION _IOW(RF_MAGIC, 4, struct rif_dac_params *)
++#define	RIF_RUN_PHY_CMDS	_IOW(RF_MAGIC, 5, struct rif_phy_cmd_set *)
++#define RIF_READ_RSSI		_IOWR(RF_MAGIC, 6, struct rf_rssi *)
++#define RIF_READ_PHY_REGS	_IOR(RF_MAGIC, 7, struct rif_reg_buf *)
++#define RIF_READ_CTRL_REGS	_IOR(RF_MAGIC, 8, struct rif_reg_buf *)
++#define RIF_START		_IO(RF_MAGIC, 9)
++#define RIF_STOP		_IO(RF_MAGIC, 10)
++#define RIF_GET_DEV_INFO	_IOWR(RF_MAGIC, 11, struct rf_dev_info *)
++#define RIF_WRITE_PHY_REGS _IOR(RF_MAGIC, 12, struct rif_write_reg_buf *)
++#define RIF_GET_DAC_VALUE	_IOR(RF_MAGIC, 13, struct rif_dac_buf *)
++#define RIF_SET_TX_ATTEN	_IOW(RF_MAGIC, 14, struct rf_tx_buf *)
++#define RIF_EN_DIS_TX		_IOW(RF_MAGIC, 15, struct rf_tx_en_dis *)
++#define RIF_WRITE_CTRL_REGS 	_IOW(RF_MAGIC, 16, struct rif_write_reg_buf *)
++#define RIF_READ_RX_GAIN 	_IOWR(RF_MAGIC, 17, struct rf_rx_gain *)
++#define RIF_CONFIG_SNIFF 	_IOWR(RF_MAGIC, 18, struct rf_sniff_params *)
++#define RIF_WRITE_RX_GAIN 	_IOW(RF_MAGIC, 19, struct rf_rx_gain *)
++#define RIF_SET_GAIN_CTRL_MODE 	_IOW(RF_MAGIC, 20, struct rf_gain_ctrl *)
++#define RIF_INIT_SYNTH_TABLE	_IOW(RF_MAGIC, 21, struct rf_synth_table *)
++#define RIF_CHANNEL_OPEN	_IOW(RF_MAGIC, 22, struct rf_channel_params *)
++#define RIF_CHANNEL_CLOSE	_IOW(RF_MAGIC, 23, unsigned int)
++#define RIF_REGISTER_EVENT	_IOW(RF_MAGIC, 24, struct rf_event_listener*)
++#define RIF_UNREGISTER_EVENT	_IO(RF_MAGIC, 25)
++#define RIF_TIMED_SPI_TRANS     _IOW(RF_MAGIC, 26, unsigned int)
++
++#endif
+-- 
+2.7.4
+

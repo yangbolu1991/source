@@ -1,0 +1,30 @@
+From 36d2fabffaf88a5e0c41d10203bf368f192a5154 Mon Sep 17 00:00:00 2001
+From: Abhimanyu Saini <abhimanyu.saini@nxp.com>
+Date: Fri, 26 May 2017 15:09:29 +0530
+Subject: [PATCH 20/26] arm64: freescale: la1575ardb: Add support for I2C temp
+ sensor
+
+Signed-off-by: Abhimanyu Saini <abhimanyu.saini@nxp.com>
+---
+ arch/arm64/boot/dts/freescale/fsl-la1575a-rdb.dts | 5 +++++
+ 1 file changed, 5 insertions(+)
+
+diff --git a/arch/arm64/boot/dts/freescale/fsl-la1575a-rdb.dts b/arch/arm64/boot/dts/freescale/fsl-la1575a-rdb.dts
+index 82e6a44..78b8265 100644
+--- a/arch/arm64/boot/dts/freescale/fsl-la1575a-rdb.dts
++++ b/arch/arm64/boot/dts/freescale/fsl-la1575a-rdb.dts
+@@ -114,6 +114,11 @@
+ 				/* IRQ10_B */
+ 				interrupts = <0 150 0x4>;
+ 			};
++
++			adt7461a@4c {
++				compatible = "adt7461a";
++				reg = <0x4c>;
++			};
+ 		};
+ 	};
+ };
+-- 
+2.7.4
+

@@ -1,0 +1,116 @@
+From 182f3aabe3a0a3b58941b7145e67bd7aed41c811 Mon Sep 17 00:00:00 2001
+From: Rajesh Bhagat <rajesh.bhagat@nxp.com>
+Date: Wed, 12 Apr 2017 12:12:38 +0530
+Subject: [PATCH 11/26] drivers: rf: Adds support to add device nodes to sysfs
+
+Adds code to add rfdev device nodes to sysfs, which
+is used by udev rules to create node at runtime.
+
+Signed-off-by: Rajesh Bhagat <rajesh.bhagat@nxp.com>
+---
+ drivers/rf/core/rfdev.c | 62 +++++++++++++++++++++++++++++++++++++++++++++++++
+ 1 file changed, 62 insertions(+)
+
+diff --git a/drivers/rf/core/rfdev.c b/drivers/rf/core/rfdev.c
+index 5730557..b3592e2 100644
+--- a/drivers/rf/core/rfdev.c
++++ b/drivers/rf/core/rfdev.c
+@@ -42,6 +42,10 @@ struct rf_priv {
+ 	unsigned long	name_idx_bitmap;
+ 	struct cdev cdev;
+ 	dev_t	dev;
++#ifdef CONFIG_ARCH_LAYERSCAPE
++	struct class *dev_class;
++	struct device *dev_device;
++#endif
+ };
+ 
+ static struct rf_priv *rf_priv;
+@@ -1259,7 +1263,11 @@ struct qspi_rf * rf_device_get(int rf_id)
+ 
+ static int __init rf_init(void)
+ {
++#ifndef CONFIG_ARCH_LAYERSCAPE
+ 	int rc;
++#else
++	int i, rc;
++#endif
+ 
+ 	rf_priv = kzalloc(sizeof(struct rf_priv), GFP_KERNEL);
+ 	if (!rf_priv) {
+@@ -1274,18 +1282,72 @@ static int __init rf_init(void)
+ 		return rc;
+ 	}
+ 
++#ifdef CONFIG_ARCH_LAYERSCAPE
++	/* create the device class */
++	rf_priv->dev_class = class_create(THIS_MODULE, "rfdev");
++	if (IS_ERR(rf_priv->dev_class)) {
++		rc = PTR_ERR(rf_priv->dev_class);
++		pr_err("class_create() failed, err = %d\n", rc);
++		goto class_fail;
++	}
++#endif
+ 	cdev_init(&rf_priv->cdev, &rf_fops);
++#ifndef CONFIG_ARCH_LAYERSCAPE
+ 	cdev_add(&rf_priv->cdev, rf_priv->dev, RF_MAX_DEVS);
++#else
++        rc = cdev_add(&rf_priv->cdev, rf_priv->dev, RF_MAX_DEVS);
++        if (rc) {
++                pr_err("cdev_add() failed, err = %d\n\n", rc);
++		goto cdev_fail;
++        }
++
++	/* create the device node in /dev */
++	for (i = 0; i < RF_MAX_DEVS; i++) {
++		rf_priv->dev_device = device_create(rf_priv->dev_class, NULL,
++				MKDEV(MAJOR(rf_priv->dev), i), NULL, "%s%d",
++				"rfdev", i);
++		if (IS_ERR(rf_priv->dev_device)) {
++			while (i--)
++				device_destroy(rf_priv->dev_class,
++					MKDEV(MAJOR(rf_priv->dev), i));
++
++			rc = PTR_ERR(rf_priv->dev_device);
++			pr_err("device_create() failed, err = %d\n", rc);
++			goto dev_fail;
++		}
++	}
++#endif
+ 	INIT_LIST_HEAD(&rf_priv->phy_list);
+ 	INIT_LIST_HEAD(&rf_priv->ctrl_list);
+ 
+ 	return 0;
++#ifdef CONFIG_ARCH_LAYERSCAPE
++dev_fail:
++	cdev_del(&rf_priv->cdev);
++cdev_fail:
++	class_destroy(rf_priv->dev_class);
++class_fail:
++	unregister_chrdev_region(rf_priv->dev, RF_MAX_DEVS);
++	return rc;
++#endif
+ }
+ 
+ static void __exit rf_cleanup(void)
+ {
++#ifdef CONFIG_ARCH_LAYERSCAPE
++	int i;
++#endif
++
+ 	if (rf_priv) {
++#ifdef CONFIG_ARCH_LAYERSCAPE
++		for (i = 0; i < RF_MAX_DEVS; i++)
++			device_destroy(rf_priv->dev_class,
++				MKDEV(MAJOR(rf_priv->dev), i));
++#endif
+ 		cdev_del(&rf_priv->cdev);
++#ifdef CONFIG_ARCH_LAYERSCAPE
++		class_destroy(rf_priv->dev_class);
++#endif
+ 		unregister_chrdev_region(rf_priv->dev, RF_MAX_DEVS);
+ 		kfree(rf_priv);
+ 	}
+-- 
+2.7.4
+

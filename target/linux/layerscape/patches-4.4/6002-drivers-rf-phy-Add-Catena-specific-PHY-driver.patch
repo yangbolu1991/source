@@ -1,0 +1,341 @@
+From 78a587816094baf1d9805296ae940b4c7544d2f4 Mon Sep 17 00:00:00 2001
+From: Rajesh Bhagat <rajesh.bhagat@nxp.com>
+Date: Wed, 1 Feb 2017 12:30:31 +0530
+Subject: [PATCH 07/26] drivers: rf: phy: Add Catena specific PHY driver
+
+Adds catena specific phy driver and implements catena_phy_run_cmds
+functionality.
+
+Signed-off-by: Rajesh Bhagat <rajesh.bhagat@nxp.com>
+---
+ drivers/rf/Kconfig      |   6 ++
+ drivers/rf/phy/Makefile |   1 +
+ drivers/rf/phy/catena.c | 263 ++++++++++++++++++++++++++++++++++++++++++++++++
+ drivers/rf/phy/catena.h |  19 ++++
+ 4 files changed, 289 insertions(+)
+ create mode 100644 drivers/rf/phy/catena.c
+ create mode 100644 drivers/rf/phy/catena.h
+
+diff --git a/drivers/rf/Kconfig b/drivers/rf/Kconfig
+index b12e4b9..062d744 100644
+--- a/drivers/rf/Kconfig
++++ b/drivers/rf/Kconfig
+@@ -37,4 +37,10 @@ config ADI9361
+ 	---help---
+ 	ADI9361 RF phy driver.
+ 
++config CATENA
++	default y
++	bool "CATENA RF PHY"
++	---help---
++	CATENA RF phy driver.
++
+ endif
+diff --git a/drivers/rf/phy/Makefile b/drivers/rf/phy/Makefile
+index f134e09..61ea07a 100644
+--- a/drivers/rf/phy/Makefile
++++ b/drivers/rf/phy/Makefile
+@@ -1,5 +1,6 @@
+ 
+ obj-$(CONFIG_ADI9361)		+= ad9361.o
++obj-$(CONFIG_CATENA)		+= catena.o
+ ifeq ($(CONFIG_ARCH_LAYERSCAPE),)
+ obj-y				+= tdd_int.o
+ endif
+diff --git a/drivers/rf/phy/catena.c b/drivers/rf/phy/catena.c
+new file mode 100644
+index 0000000..d95a329
+--- /dev/null
++++ b/drivers/rf/phy/catena.c
+@@ -0,0 +1,263 @@
++/*
++ *
++ * File: drivers/rf/phy/catena.c
++ *
++ * Freescale CATENA Phy driver.
++ *
++ * Author: Rajesh Bhagat <rajesh.bhagat@nxp.com>
++ *
++ * Copyright (C) 2017 Freescale Semiconductor, Inc. All rights reserved.
++ *
++ * This program is free software; you can redistribute  it and/or modify it
++ * under  the terms of  the GNU General  Public License as published by the
++ * Free Software Foundation;  either version 2 of the  License, or (at your
++ * option) any later version.
++ *
++ * This program is distributed in the hope that it will be useful, but
++ * WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
++ * General Public License for more details.
++ *
++ */
++
++#include <linux/module.h>
++#include <linux/device.h>
++#include <linux/types.h>
++#include <linux/kernel.h>
++#include <linux/spi/spi.h>
++#include <linux/param.h>
++#include <linux/delay.h>
++#include <linux/of.h>
++#include <linux/io.h>
++#include <linux/of_gpio.h>
++#include <linux/gpio.h>
++#include <linux/rfdev.h>
++#include <linux/string.h>
++#include <linux/platform_device.h>
++#include "catena.h"
++
++#define DRV_DESC "FREESCALE DEVELOPED CATENA PHY DRIVER"
++#define DRV_NAME "catena_phy"
++#define DEBUG
++
++MODULE_LICENSE("GPL v2");
++MODULE_DESCRIPTION(DRV_DESC);
++
++static int catena_phy_run_cmds(struct rf_phy_dev *catena_phy, struct rif_phy_cmd *cmds,
++                int count);
++static int catena_phy_read(struct rf_phy_dev *catena_phy, u32 start, u32 count,
++                u32 *buff);
++static int catena_phy_write(struct rf_phy_dev *catena_phy, u32 reg, u32 data);
++static int catena_phy_start(struct rf_phy_dev *catena_phy);
++static int catena_init(struct rf_phy_dev *phy, struct rf_init_params *params);
++static int catena_phy_stop(struct rf_phy_dev *phy);
++
++static struct rf_phy_ops catena_phy_ops = {
++	.init = catena_init,
++	.run_cmds = catena_phy_run_cmds,
++	.read_regs = catena_phy_read,
++	.write_reg = catena_phy_write,
++	.start = catena_phy_start,
++	.stop = catena_phy_stop
++};
++
++
++int catena_phy_run_cmds(struct rf_phy_dev *catena_phy,
++		struct rif_phy_cmd *cmds, int count)
++{
++	int i;
++	u32 val = 0;
++	struct catena_dev_info *phy_info;
++
++	phy_info = (struct catena_dev_info *) catena_phy->priv;
++
++	for (i = 0; i < count; i++) {
++		switch (cmds[i].cmd) {
++		case SPI_WRITE:
++			pr_info("Write: %x %x\n", cmds[i].param1,
++							cmds[i].param2);
++			break;
++
++		case SPI_READ:
++			pr_info("Read from reg: %x, val %x\n",
++				cmds[i].param1, val);
++			break;
++
++		case SPI_WAIT:
++			pr_info("Wait %d\n", cmds[i].param3);
++			msleep_interruptible(cmds[i].param3);
++			break;
++
++		default:
++			pr_err("Not a valid CATENA_PHY command\n");
++			return -EINVAL;
++		}
++	}
++
++	return 0;
++}
++
++int catena_init(struct rf_phy_dev *catena_phy,
++		struct rf_init_params *params)
++{
++	return 0;
++}
++
++int catena_phy_stop(struct rf_phy_dev *catena_phy)
++{
++	return 0;
++}
++
++int catena_phy_start(struct rf_phy_dev *catena_phy)
++{
++	return 0;
++}
++
++int catena_phy_read(struct rf_phy_dev *catena_phy, u32 start,
++		u32 count, u32 *buff)
++{
++	return 0;
++}
++
++int catena_phy_write(struct rf_phy_dev *catena_phy, u32 reg,
++		u32 data)
++{
++	return 0;
++}
++
++static int dummy_rf_init(struct rf_ctrl_dev *rf_dev,
++                struct rf_init_params *init_params)
++{
++        return 0;
++}
++
++static int dummy_rf_start(struct rf_ctrl_dev *rf_dev)
++{
++        return 0;
++}
++
++static int dummy_rf_stop(struct rf_ctrl_dev *rf_dev)
++{
++        return 0;
++}
++
++static struct rf_ctrl_ops dummy_rfops = {
++        .init = dummy_rf_init,
++        .start = dummy_rf_start,
++        .stop = dummy_rf_stop,
++};
++static int catena_phy_remove(struct platform_device *pdev)
++{
++        struct rf_phy_dev *catena_phy = dev_get_drvdata(&pdev->dev);
++	struct catena_dev_info *phy_info = catena_phy->priv;
++
++	unregister_rf_ctrl_dev(phy_info->rf_dev);
++	free_rf_ctrl_dev(phy_info->rf_dev);
++
++	unregister_rf_phy_dev(catena_phy);
++        free_rf_phy_dev(catena_phy);
++
++	return 0;
++}
++
++static int catena_phy_probe(struct platform_device *pdev)
++{
++	int ret = 0;
++	struct rf_ctrl_dev *rf_dev;
++	struct rf_phy_dev *catena_phy;
++	struct catena_dev_info *phy_info;
++	struct device_node *np = pdev->dev.of_node;
++	u32 prop;
++
++        if (!np)
++                return -EINVAL;
++
++        if (of_property_read_u32(np, "rf-id", &prop) < 0) {
++                pr_err("rf-id attribute not found\n");
++                return -EINVAL;
++        }
++
++        rf_dev = allocate_rf_ctrl_dev(0, GFP_KERNEL);
++        if (!rf_dev) {
++                pr_err("rf_dev allocation failure\n");
++		return -ENOMEM;
++        }
++
++        rf_dev->ops = &dummy_rfops;
++	rf_dev->phy_id = prop;
++
++        ret = register_rf_ctrl_dev(rf_dev);
++        if (ret) {
++                pr_err("rf_dev registration failed\n");
++                goto err_rf_ctrl_dev;
++        }
++
++	catena_phy = allocate_rf_phy_dev(sizeof(struct catena_dev_info), GFP_KERNEL);
++	if (!catena_phy) {
++		pr_err("rf_phy_dev allocation failure\n");
++		ret = -ENOMEM;
++		goto err_rf_ctrl_dev1;
++	}
++	catena_phy->phy_id = prop;
++
++	phy_info = (struct catena_dev_info *) catena_phy->priv;
++	phy_info->rf_id = prop;
++	phy_info->rf_dev = rf_dev;
++
++	catena_phy->ops = &catena_phy_ops;
++
++	strncpy(&catena_phy->name[0], "catena", sizeof(catena_phy->name));
++
++	ret = register_rf_phy_dev(catena_phy);
++	if (ret) {
++		pr_err("register_rf_phy_dev failed.\n");
++		goto err_rf_phy_dev;
++	}
++
++	dev_set_drvdata(&pdev->dev, catena_phy);
++	return ret;
++
++err_rf_phy_dev:
++	free_rf_phy_dev(catena_phy);
++err_rf_ctrl_dev1:
++	unregister_rf_ctrl_dev(rf_dev);
++err_rf_ctrl_dev:
++	free_rf_ctrl_dev(rf_dev);
++	return ret;
++}
++
++static const struct of_device_id catena_match[] = {
++        {.compatible = "fsl,catenaxcvr",},
++        {},
++};
++
++static struct platform_driver catena_driver = {
++        .driver = {
++                .name = "fsl-catenaxcvr",
++                .owner = THIS_MODULE,
++                .of_match_table = catena_match,
++        },
++        .probe = catena_phy_probe,
++        .remove = catena_phy_remove,
++};
++static int __init catena_phy_init(void)
++{
++	int err;
++
++	err = platform_driver_register(&catena_driver);
++	if (err == 0)
++		return 0;
++	return err;
++}
++
++static void __exit catena_phy_exit(void)
++{
++	platform_driver_unregister(&catena_driver);
++}
++
++module_init(catena_phy_init);
++module_exit(catena_phy_exit);
++
++MODULE_LICENSE("GPL v2");
++MODULE_AUTHOR("Freescale Semiconductor, Inc.");
++MODULE_DESCRIPTION("Freescale Catena PHY Driver");
+diff --git a/drivers/rf/phy/catena.h b/drivers/rf/phy/catena.h
+new file mode 100644
+index 0000000..d2693b3
+--- /dev/null
++++ b/drivers/rf/phy/catena.h
+@@ -0,0 +1,19 @@
++/*
++ * drivers/rf/phy/catena.h
++ *
++ * Copyright 2017 Freescale Semiconductor, Inc.
++ *
++ * This program is free software; you can redistribute  it and/or modify it
++ * under  the terms of  the GNU General  Public License as published by the
++ * Free Software Foundation;  either version 2 of the  License, or (at your
++ * option) any later version.
++ */
++
++#ifndef CATENA_PHY_H
++#define CATENA_PHY_H
++
++struct catena_dev_info {
++	int rf_id;
++	struct rf_ctrl_dev *rf_dev;
++};
++#endif /* CATENA_PHY_H */
+-- 
+2.7.4
+

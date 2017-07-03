@@ -1,0 +1,25 @@
+From 5a839dbb3f1a87204bf8275940cdd6ea6e146ae8 Mon Sep 17 00:00:00 2001
+From: Yangbo Lu <yangbo.lu@nxp.com>
+Date: Mon, 10 Jul 2017 13:31:29 +0800
+Subject: [PATCH] rf: fix 32-bit kernel compile issue
+
+Signed-off-by: Yangbo Lu <yangbo.lu@nxp.com>
+---
+ include/linux/rfdev.h | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/include/linux/rfdev.h b/include/linux/rfdev.h
+index 8cfb68b..19e1ebb 100644
+--- a/include/linux/rfdev.h
++++ b/include/linux/rfdev.h
+@@ -19,6 +19,7 @@
+ #include <linux/wait-simple.h>
+ #include <linux/list.h>
+ #include <asm/atomic.h>
++#include <asm-generic/siginfo.h>
+ 
+ #define TTI_LOG_SIZE	10
+ 
+-- 
+2.7.4
+

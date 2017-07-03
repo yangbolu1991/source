@@ -1,0 +1,33 @@
+From d6a003863e5bfd2927e274056a81de6673f7d437 Mon Sep 17 00:00:00 2001
+From: Rajesh Bhagat <rajesh.bhagat@nxp.com>
+Date: Wed, 19 Apr 2017 14:42:02 +0530
+Subject: [PATCH 15/26] vspa: do not write HOST_GO in watchdog timer
+
+current HOST_GO implementation interferes with AIOP CEU write.
+GPP GOs for checking VSPA is alive and AIOP CEU should not interfere
+
+Signed-off-by: Mihai Barbulescu <mihai.barbulescu@nxp.com>
+Signed-off-by: Rajesh Bhagat <rajesh.bhagat@nxp.com>
+---
+ drivers/misc/vspa/main.c | 2 ++
+ 1 file changed, 2 insertions(+)
+
+diff --git a/drivers/misc/vspa/main.c b/drivers/misc/vspa/main.c
+index 443e596..f82581f 100644
+--- a/drivers/misc/vspa/main.c
++++ b/drivers/misc/vspa/main.c
+@@ -709,9 +709,11 @@ static void watchdog_callback(unsigned long data)
+ 					VSPA_ERR_WATCHDOG, 0, val, 0);
+ 		}
+ 		vspadev->watchdog_value = val;
++#ifdef UNUSED
+ 		val = vspa_reg_read(regs + CONTROL_REG_OFFSET);
+ 		val = (val & CONTROL_REG_MASK) | CONTROL_HOST_GO;
+ 		vspa_reg_write(regs + CONTROL_REG_OFFSET, val);
++#endif
+ 		mod_timer(&vspadev->watchdog_timer, jiffies +
+ 			msecs_to_jiffies(vspadev->watchdog_interval_msecs));
+ 	} else {
+-- 
+2.7.4
+

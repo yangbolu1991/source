@@ -1,0 +1,234 @@
+From 9c9d1e4d20633fd8873cb752d11dd6922434f046 Mon Sep 17 00:00:00 2001
+From: Abhimanyu Saini <abhimanyu.saini@nxp.com>
+Date: Tue, 30 May 2017 16:10:30 +0530
+Subject: [PATCH 22/26] drivers: misc: Update copyright
+
+Signed-off-by: Abhimanyu Saini <abhimanyu.saini@nxp.com>
+---
+ drivers/misc/landshark.c         | 2 +-
+ drivers/misc/landshark.h         | 2 +-
+ drivers/misc/vspa/event.c        | 2 +-
+ drivers/misc/vspa/main.c         | 2 +-
+ drivers/misc/vspa/sys.c          | 2 +-
+ drivers/misc/vspa/vspa.h         | 2 +-
+ drivers/rf/controllers/fsl_aic.c | 2 +-
+ drivers/rf/controllers/fsl_aic.h | 2 +-
+ drivers/rf/core/rf_channel.c     | 2 +-
+ drivers/rf/core/rfdev.c          | 2 +-
+ drivers/rf/phy/ad9361.c          | 2 +-
+ drivers/rf/phy/ad9361.h          | 2 +-
+ drivers/rf/phy/catena.c          | 2 +-
+ drivers/rf/phy/catena.h          | 2 +-
+ drivers/rf/phy/tdd_int.c         | 2 +-
+ drivers/rf/phy/tdd_int.h         | 2 +-
+ 16 files changed, 16 insertions(+), 16 deletions(-)
+
+diff --git a/drivers/misc/landshark.c b/drivers/misc/landshark.c
+index 8686d00..7319155 100644
+--- a/drivers/misc/landshark.c
++++ b/drivers/misc/landshark.c
+@@ -7,7 +7,7 @@
+  * Authors: Arpit Goel <B44344@freescale.com>
+  *          Rajesh Bhagat <rajesh.bhagat@nxp.com>
+  *
+- * Copyright 2016 Freescale Semiconductor, Inc.
++ * Copyright 2017 NXP
+  *
+  * This program is free software; you can redistribute  it and/or modify it
+  * under  the terms of  the GNU General  Public License as published by the
+diff --git a/drivers/misc/landshark.h b/drivers/misc/landshark.h
+index dd2364f..5bc2256 100644
+--- a/drivers/misc/landshark.h
++++ b/drivers/misc/landshark.h
+@@ -7,7 +7,7 @@
+  * Authors: Arpit Goel <B44344@freescale.com>
+  *          Rajesh Bhagat <rajesh.bhagat@nxp.com>
+  *
+- * Copyright 2016 Freescale Semiconductor, Inc.
++ * Copyright 2017 NXP
+  *
+  * This program is free software; you can redistribute  it and/or modify it
+  * under  the terms of  the GNU General  Public License as published by the
+diff --git a/drivers/misc/vspa/event.c b/drivers/misc/vspa/event.c
+index 75d101a..b78bd98 100644
+--- a/drivers/misc/vspa/event.c
++++ b/drivers/misc/vspa/event.c
+@@ -2,7 +2,7 @@
+  * drivers/misc/vspa/event.c
+  * VSPA device driver
+  *
+- * Copyright (C) 2016 Freescale Semiconductor, Inc.
++ * Copyright 2017 NXP
+  *
+  * Redistribution and use in source and binary forms, with or without
+  * modification, are permitted provided that the following conditions are met:
+diff --git a/drivers/misc/vspa/main.c b/drivers/misc/vspa/main.c
+index 5b1b46d..529d9ed 100644
+--- a/drivers/misc/vspa/main.c
++++ b/drivers/misc/vspa/main.c
+@@ -2,7 +2,7 @@
+  * drivers/misc/vspa/main.c
+  * VSPA device driver
+  *
+- * Copyright (C) 2016 Freescale Semiconductor, Inc.
++ * Copyright 2017 NXP
+  *
+  * Redistribution and use in source and binary forms, with or without
+  * modification, are permitted provided that the following conditions are met:
+diff --git a/drivers/misc/vspa/sys.c b/drivers/misc/vspa/sys.c
+index 54061a5..7275401 100644
+--- a/drivers/misc/vspa/sys.c
++++ b/drivers/misc/vspa/sys.c
+@@ -2,7 +2,7 @@
+  * drivers/misc/vspa.c
+  * VSPA device driver
+  *
+- * Copyright (C) 2016 Freescale Semiconductor, Inc.
++ * Copyright (C) 2017 NXP
+  *
+  * Redistribution and use in source and binary forms, with or without
+  * modification, are permitted provided that the following conditions are met:
+diff --git a/drivers/misc/vspa/vspa.h b/drivers/misc/vspa/vspa.h
+index 0a6e0b4..4f6e219 100644
+--- a/drivers/misc/vspa/vspa.h
++++ b/drivers/misc/vspa/vspa.h
+@@ -1,5 +1,5 @@
+ /*
+- * Copyright (C) 2016 Freescale Semiconductor, Inc.
++ * Copyright 2017 NXP
+  *
+  * Redistribution and use in source and binary forms, with or without
+  * modification, are permitted provided that the following conditions are met:
+diff --git a/drivers/rf/controllers/fsl_aic.c b/drivers/rf/controllers/fsl_aic.c
+index a2c548e..c47750a 100644
+--- a/drivers/rf/controllers/fsl_aic.c
++++ b/drivers/rf/controllers/fsl_aic.c
+@@ -13,7 +13,7 @@
+  *
+  * Author: pankaj chauhan <pankaj.chauhan@freescale.com>
+  *
+- * Copyright 2011-2013 Freescale Semiconductor, Inc.
++ * Copyright 2017 NXP
+  *
+  * This program is free software; you can redistribute  it and/or modify it
+  * under  the terms of  the GNU General  Public License as published by the
+diff --git a/drivers/rf/controllers/fsl_aic.h b/drivers/rf/controllers/fsl_aic.h
+index aec29c0..0629558 100644
+--- a/drivers/rf/controllers/fsl_aic.h
++++ b/drivers/rf/controllers/fsl_aic.h
+@@ -13,7 +13,7 @@
+  *
+  * Author: pankaj chauhan <pankaj.chauhan@freescale.com>
+  *
+- * Copyright 2011-2013 Freescale Semiconductor, Inc.
++ * Copyright 2017 NXP
+  *
+  * This program is free software; you can redistribute  it and/or modify it
+  * under  the terms of  the GNU General  Public License as published by the
+diff --git a/drivers/rf/core/rf_channel.c b/drivers/rf/core/rf_channel.c
+index 780c30d..8b9b82b 100644
+--- a/drivers/rf/core/rf_channel.c
++++ b/drivers/rf/core/rf_channel.c
+@@ -12,7 +12,7 @@
+  *
+  * Author: pankaj chauhan <pankaj.chauhan@freescale.com>
+  *
+- * Copyright 2011-2013 Freescale Semiconductor, Inc.
++ * Copyright 2017 NXP
+  *
+  * This program is free software; you can redistribute  it and/or modify it
+  * under  the terms of  the GNU General  Public License as published by the
+diff --git a/drivers/rf/core/rfdev.c b/drivers/rf/core/rfdev.c
+index b3592e2..5c3af3c 100644
+--- a/drivers/rf/core/rfdev.c
++++ b/drivers/rf/core/rfdev.c
+@@ -11,7 +11,7 @@
+  *
+  * Author: pankaj chauhan <pankaj.chauhan@freescale.com>
+  *
+- * Copyright 2011-2013 Freescale Semiconductor, Inc.
++ * Copyright 2017 NXP
+  *
+  * This program is free software; you can redistribute  it and/or modify it
+  * under  the terms of  the GNU General  Public License as published by the
+diff --git a/drivers/rf/phy/ad9361.c b/drivers/rf/phy/ad9361.c
+index 21582f4..f67b47a 100644
+--- a/drivers/rf/phy/ad9361.c
++++ b/drivers/rf/phy/ad9361.c
+@@ -11,7 +11,7 @@
+  *
+  * Author: Shaveta Leekha <shaveta@freescale.com>
+  *
+- * Copyright (C) 2011-2012 Freescale Semiconductor, Inc. All rights reserved.
++ * Copyright 2017 NXP
+  *
+  * This program is free software; you can redistribute  it and/or modify it
+  * under  the terms of  the GNU General  Public License as published by the
+diff --git a/drivers/rf/phy/ad9361.h b/drivers/rf/phy/ad9361.h
+index 0637350..8997ce3 100644
+--- a/drivers/rf/phy/ad9361.h
++++ b/drivers/rf/phy/ad9361.h
+@@ -1,7 +1,7 @@
+ /*
+  * drivers/rf/phy/ad9361.h
+  *
+- * Copyright 2011-2013 Freescale Semiconductor, Inc.
++ * Copyright 2017 NXP
+  *
+  * This program is free software; you can redistribute  it and/or modify it
+  * under  the terms of  the GNU General  Public License as published by the
+diff --git a/drivers/rf/phy/catena.c b/drivers/rf/phy/catena.c
+index ebd49ea..0910e7b 100644
+--- a/drivers/rf/phy/catena.c
++++ b/drivers/rf/phy/catena.c
+@@ -6,7 +6,7 @@
+  *
+  * Author: Rajesh Bhagat <rajesh.bhagat@nxp.com>
+  *
+- * Copyright (C) 2017 Freescale Semiconductor, Inc. All rights reserved.
++ * Copyright 2017 NXP
+  *
+  * This program is free software; you can redistribute  it and/or modify it
+  * under  the terms of  the GNU General  Public License as published by the
+diff --git a/drivers/rf/phy/catena.h b/drivers/rf/phy/catena.h
+index d2693b3..b10a075 100644
+--- a/drivers/rf/phy/catena.h
++++ b/drivers/rf/phy/catena.h
+@@ -1,7 +1,7 @@
+ /*
+  * drivers/rf/phy/catena.h
+  *
+- * Copyright 2017 Freescale Semiconductor, Inc.
++ * Copyright 2017 NXP
+  *
+  * This program is free software; you can redistribute  it and/or modify it
+  * under  the terms of  the GNU General  Public License as published by the
+diff --git a/drivers/rf/phy/tdd_int.c b/drivers/rf/phy/tdd_int.c
+index ca58892..9ba38cb 100644
+--- a/drivers/rf/phy/tdd_int.c
++++ b/drivers/rf/phy/tdd_int.c
+@@ -6,7 +6,7 @@
+  * SPI bus for BSC9131 platform.
+  * Author: Akhil Goyal <akhil.goyal@freescale.com>
+  *
+- * Copyright 2013 Freescale Semiconductor, Inc.
++ * Copyright 2017 NXP
+  *
+  * This program is free software; you can redistribute  it and/or modify it
+  * under  the terms of  the GNU General  Public License as published by the
+diff --git a/drivers/rf/phy/tdd_int.h b/drivers/rf/phy/tdd_int.h
+index f7f6768..52d8117 100644
+--- a/drivers/rf/phy/tdd_int.h
++++ b/drivers/rf/phy/tdd_int.h
+@@ -1,7 +1,7 @@
+ /*
+  * drivers/rf/phy/tdd_int.h
+  *
+- * Copyright 2013 Freescale Semiconductor, Inc.
++ * Copyright 2017 NXP
+  *
+  * This program is free software; you can redistribute  it and/or modify it
+  * under  the terms of  the GNU General  Public License as published by the
+-- 
+2.7.4
+

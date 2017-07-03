@@ -1,0 +1,147 @@
+From d730fa187e1d5e57a97321198f7828fa08c5630b Mon Sep 17 00:00:00 2001
+From: Rajesh Bhagat <rajesh.bhagat@nxp.com>
+Date: Wed, 26 Apr 2017 10:48:50 +0530
+Subject: [PATCH 18/26] drivers: misc: vspa: Add ATU entry for AIOP-W SRAM
+
+Adds ATU entry for AIOP SRAM for below section added
+in VSPA binary.
+
+Map virtual [0x5400_0000-0x541F_FFFF]
+to physical AIOP-W 2MB SRAM [0x4C_0400_0000-0x4C_041F_FFFF]
+
+.sram       ("rwx") 4 : org = 0x54000000,  len = 0x200000;
+
+Signed-off-by: Arpit Goel <arpit.goel@nxp.com>
+Signed-off-by: Rajesh Bhagat <rajesh.bhagat@nxp.com>
+---
+ arch/arm64/boot/dts/freescale/fsl-la1575a.dtsi |  7 ++++---
+ drivers/misc/vspa/main.c                       | 28 +++++++++++++++-----------
+ drivers/misc/vspa/vspa.h                       |  1 +
+ 3 files changed, 21 insertions(+), 15 deletions(-)
+
+diff --git a/arch/arm64/boot/dts/freescale/fsl-la1575a.dtsi b/arch/arm64/boot/dts/freescale/fsl-la1575a.dtsi
+index 8098faf..62a1c01 100644
+--- a/arch/arm64/boot/dts/freescale/fsl-la1575a.dtsi
++++ b/arch/arm64/boot/dts/freescale/fsl-la1575a.dtsi
+@@ -706,11 +706,11 @@
+ 				Windows */
+ 			reg = <0 0xa090000 0 0x180>;
+ 			/* Number of ATU windows to be used */
+-			atu_win_cnt = <1>;
++			atu_win_cnt = <2>;
+ 			/* ATU Windows Entry Format:
+ 			* Maximum Window size supported by ATU is 2GB
+ 			* atu_win_<n> =
+-			*	< <64 Bit SoC Address> <Window Size> >
++			*	< <64 Bit SoC Address> <Window Size> <Mapped Address> >
+ 			*/
+ 
+ 			/*	Value Window Size
+@@ -732,7 +732,8 @@
+ 			*	01111 2 GB
+ 			*	1xxxx Reserved
+ 			*/
+-			atu_win_1 = <0x81 0xf0000000 0x0 0x0c>;
++			atu_win_1 = <0x81 0xf0000000 0x0 0x0c 0x0 0xf0000000>;
++			atu_win_2 = <0x4c 0x0400000 0x0 0x05 0x0 0x54000000>;
+ 		};
+ 
+ 		vspa0: vspa@0xa000000 {
+diff --git a/drivers/misc/vspa/main.c b/drivers/misc/vspa/main.c
+index f82581f..5b1b46d 100644
+--- a/drivers/misc/vspa/main.c
++++ b/drivers/misc/vspa/main.c
+@@ -111,6 +111,8 @@ static struct class *vspa_class;
+ 	vspadev->vspa_atu_win[win_num].windw_base_add
+ #define ATU_WINDW_SZ(win_num) \
+ 	vspadev->vspa_atu_win[win_num].windw_sz
++#define ATU_WINDW_MAPPED_ADD(win_num) \
++	vspadev->vspa_atu_win[win_num].windw_mapped_add
+ 
+ 
+ /*********************** DMA Request Queue ****************************/
+@@ -145,10 +147,10 @@ u32 vspa_map_axi_addr_atu_win(struct vspa_device *vspadev,
+ 			atu_win_cnt++) {
+ 		if (((u32)dma_axi_addr &
+ 				(~SZ_TO_MASK(ATU_WINDW_SZ(atu_win_cnt)))) ==
+-				(u32)ATU_WINDW_BASE_ADD(atu_win_cnt)) {
++				(u32)ATU_WINDW_MAPPED_ADD(atu_win_cnt)) {
+ 			/* Window Found
+ 			 * Map the address to window and return */
+-			return ((u32)(u64)ATU_WINDW_BASE_ADD(atu_win_cnt) +
++			return ((u32)(u64)ATU_WINDW_MAPPED_ADD(atu_win_cnt) +
+ 					(dma_axi_addr &
+ 					 SZ_TO_MASK(ATU_WINDW_SZ(atu_win_cnt))));
+ 		}
+@@ -2014,7 +2016,7 @@ static int parse_atu_dts(struct device_node *np, struct vspa_device *vspadev)
+ 
+ 	u32 num_atu_windws, win_cnt;
+ 	char atu_win_str[MAX_STRING_ATU_WIN];
+-	u64 atu_win_proprts[2];
++	u64 atu_win_proprts[3];
+ 	struct device_node *atu_np;
+ 	struct resource atu_res;
+ 
+@@ -2032,7 +2034,7 @@ static int parse_atu_dts(struct device_node *np, struct vspa_device *vspadev)
+ 				snprintf(atu_win_str, MAX_STRING_ATU_WIN,
+ 						"atu_win_%d", (win_cnt + 1));
+ 				if (of_property_read_u64_array(atu_np, atu_win_str,
+-							atu_win_proprts, 2) < 0) {
++							atu_win_proprts, 3) < 0) {
+ 					dev_err(vspadev->dev,
+ 							"ATU WIN[%d] properties invalid %s%d\n",
+ 							win_cnt, VSPA_DEVICE_NAME, vspadev->id);
+@@ -2044,6 +2046,8 @@ static int parse_atu_dts(struct device_node *np, struct vspa_device *vspadev)
+ 						atu_win_proprts[0];
+ 					vspadev->vspa_atu_win[win_cnt].windw_sz =
+ 						atu_win_proprts[1] + VSPA_ATU_MIN_WIN_SZ;
++					vspadev->vspa_atu_win[win_cnt].windw_mapped_add =
++						atu_win_proprts[2];
+ 				}
+ 			} /* end for */
+ 		}
+@@ -2062,13 +2066,13 @@ static int parse_atu_dts(struct device_node *np, struct vspa_device *vspadev)
+ 		vspadev->vspa_atu_size =  resource_size(&atu_res);
+ 	}
+ 
+-	IF_DEBUG(DEBUG_STARTUP) {
+-		for (win_cnt = 0; win_cnt < vspadev->num_atu_win; win_cnt++) {
+-			pr_debug("ATU WIN[%d]START 0x%llx Size 0x%llx\n",
+-					win_cnt,
+-					vspadev->vspa_atu_win[win_cnt].windw_base_add,
+-					vspadev->vspa_atu_win[win_cnt].windw_sz);
+-		}
++	for (win_cnt = 0; win_cnt < vspadev->num_atu_win; win_cnt++) {
++		dev_info(vspadev->dev,
++				"ATU Window[%d], Start 0x%llx, Size 0x%llx, Mapped Addr 0x%llx\n",
++				win_cnt,
++				vspadev->vspa_atu_win[win_cnt].windw_base_add,
++				vspadev->vspa_atu_win[win_cnt].windw_sz,
++				vspadev->vspa_atu_win[win_cnt].windw_mapped_add);
+ 	}
+ 
+ 	return 0;
+@@ -2180,7 +2184,7 @@ void vspa_atu_enable(struct vspa_device *vspadev)
+ 		[31 ................ 16 15 ........... 5 4 ........ 0 ]
+ 		  Window Base Address       Reserved      Window Size*/
+ 		vspa_reg_write(VSPA_ATU_OWBAR(atu_win_cnt),
+-				(((u32)(u64) ATU_WINDW_BASE_ADD(atu_win_cnt) &
++				(((u32)(u64) ATU_WINDW_MAPPED_ADD(atu_win_cnt) &
+ 				  (~SZ_TO_MASK(ATU_WINDW_SZ(atu_win_cnt)))) |
+ 				 ((ATU_WINDW_SZ(atu_win_cnt) - VSPA_ATU_MIN_WIN_SZ)
+ 				  & 0x1F)));
+diff --git a/drivers/misc/vspa/vspa.h b/drivers/misc/vspa/vspa.h
+index dce956c..0a6e0b4 100644
+--- a/drivers/misc/vspa/vspa.h
++++ b/drivers/misc/vspa/vspa.h
+@@ -271,6 +271,7 @@ struct seqid {
+ struct atu_window {
+ 	uint64_t windw_base_add;
+ 	uint64_t windw_sz;
++	uint64_t windw_mapped_add;
+ };
+ 
+ /* The below structure contains all the information for the
+-- 
+2.7.4
+

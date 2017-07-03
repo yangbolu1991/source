@@ -1,0 +1,68 @@
+From 57dbbbe266be8587d4b796302ab71ec96ad1e491 Mon Sep 17 00:00:00 2001
+From: Tang Yuantian <Yuantian.Tang@nxp.com>
+Date: Tue, 10 Jan 2017 14:36:25 +0800
+Subject: [PATCH 26/26] armv8: clk: fix clock configuration error on ls1088a
+
+Clock configuration on ls1088a is not compatible with ls2088's.
+So added ls1088a its own clock configuration.
+
+Signed-off-by: Tang Yuantian <yuantian.tang@nxp.com>
+---
+ arch/arm64/boot/dts/freescale/fsl-ls1088a.dtsi |  2 +-
+ drivers/clk/clk-qoriq.c                        | 13 +++++++++++++
+ 2 files changed, 14 insertions(+), 1 deletion(-)
+
+diff --git a/arch/arm64/boot/dts/freescale/fsl-ls1088a.dtsi b/arch/arm64/boot/dts/freescale/fsl-ls1088a.dtsi
+index 8d9e437..876aa96 100644
+--- a/arch/arm64/boot/dts/freescale/fsl-ls1088a.dtsi
++++ b/arch/arm64/boot/dts/freescale/fsl-ls1088a.dtsi
+@@ -109,7 +109,7 @@
+ 	};
+ 
+ 	clockgen: clocking@1300000 {
+-		compatible = "fsl,ls2080a-clockgen", "fsl,ls1088a-clockgen";
++		compatible = "fsl,ls1088a-clockgen";
+ 		reg = <0 0x1300000 0 0xa0000>;
+ 		#clock-cells = <2>;
+ 		clocks = <&sysclk>;
+diff --git a/drivers/clk/clk-qoriq.c b/drivers/clk/clk-qoriq.c
+index 4121ec4..8ae82a1 100644
+--- a/drivers/clk/clk-qoriq.c
++++ b/drivers/clk/clk-qoriq.c
+@@ -548,6 +548,17 @@ static const struct clockgen_chipinfo chipinfo[] = {
+ 		.flags = CG_PLL_8BIT,
+ 	},
+ 	{
++		.compat = "fsl,ls1088a-clockgen",
++		.cmux_groups = {
++			&clockgen2_cmux_cga12
++		},
++		.cmux_to_group = {
++			0, 0, -1
++		},
++		.pll_mask = 0x07,
++		.flags = CG_VER3 | CG_LITTLE_ENDIAN,
++	},
++	{
+ 		.compat = "fsl,ls2080a-clockgen",
+ 		.cmux_groups = {
+ 			&clockgen2_cmux_cga12, &clockgen2_cmux_cgb
+@@ -716,6 +727,7 @@ static int mux_set_parent(struct clk_hw *hw, u8 idx)
+ 		return -EINVAL;
+ 
+ 	clksel = hwc->parent_to_clksel[idx];
++
+ 	cg_out(hwc->cg, (clksel << CLKSEL_SHIFT) & CLKSEL_MASK, hwc->reg);
+ 
+ 	return 0;
+@@ -1344,6 +1356,7 @@ CLK_OF_DECLARE(qoriq_clockgen_2, "fsl,qoriq-clockgen-2.0", clockgen_init);
+ CLK_OF_DECLARE(qoriq_clockgen_ls1021a, "fsl,ls1021a-clockgen", clockgen_init);
+ CLK_OF_DECLARE(qoriq_clockgen_ls1043a, "fsl,ls1043a-clockgen", clockgen_init);
+ CLK_OF_DECLARE(qoriq_clockgen_ls1046a, "fsl,ls1046a-clockgen", clockgen_init);
++CLK_OF_DECLARE(qoriq_clockgen_ls1088a, "fsl,ls1088a-clockgen", clockgen_init);
+ CLK_OF_DECLARE(qoriq_clockgen_ls2080a, "fsl,ls2080a-clockgen", clockgen_init);
+ CLK_OF_DECLARE(qoriq_clockgen_ls1012a, "fsl,ls1012a-clockgen", clockgen_init);
+ CLK_OF_DECLARE(qoriq_clockgen_ls2088a, "fsl,ls2088a-clockgen", clockgen_init);
+-- 
+2.7.4
+

@@ -1,0 +1,41 @@
+From f90cd85e319ac0168b9c3e0851a6022108569929 Mon Sep 17 00:00:00 2001
+From: Yangbo Lu <yangbo.lu@nxp.com>
+Date: Fri, 7 Jul 2017 11:01:54 +0800
+Subject: [PATCH] mtd: spi-nor: fsl-quad: remove duplicate
+ mtd_device_register()
+
+Below patch changed position of mtd_device_register().
+0877b45 mtd: spi-nor: fsl-quad: move mtd_device_register to the last of probe
+
+When another patch was ported to this driver, there was a
+duplicate mtd_device_register(). This patch is to remove
+the duplicate one.
+
+Signd-off-by: Yangbo Lu <yangbo.lu@nxp.com>
+---
+ drivers/mtd/spi-nor/fsl-quadspi.c | 9 ---------
+ 1 file changed, 9 deletions(-)
+
+diff --git a/drivers/mtd/spi-nor/fsl-quadspi.c b/drivers/mtd/spi-nor/fsl-quadspi.c
+index 4697131..72e2f29 100644
+--- a/drivers/mtd/spi-nor/fsl-quadspi.c
++++ b/drivers/mtd/spi-nor/fsl-quadspi.c
+@@ -1775,15 +1775,6 @@ static int fsl_qspi_probe(struct platform_device *pdev)
+ 	fsl_qspi_clk_disable_unprep(q);
+ 	dev_info(dev, "Freescale QuadSPI probe success\n");
+ 
+-	for (i = 0; i < q->nor_num; i++) {
+-		/* skip the holes */
+-		if (!q->has_second_chip)
+-			i *= 2;
+-
+-		ret = mtd_device_register(&q->nor[i].mtd, NULL, 0);
+-		if (ret)
+-			goto last_init_failed;
+-	}
+ 	return 0;
+ 
+ last_init_failed:
+-- 
+2.7.4
+

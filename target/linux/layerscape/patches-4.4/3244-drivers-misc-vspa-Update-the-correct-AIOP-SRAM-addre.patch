@@ -1,0 +1,29 @@
+From eee41dbea2350d8a82791e73223d7ea59162c16c Mon Sep 17 00:00:00 2001
+From: Rajesh Bhagat <rajesh.bhagat@nxp.com>
+Date: Wed, 3 May 2017 08:45:10 +0530
+Subject: [PATCH 19/26] drivers: misc: vspa: Update the correct AIOP SRAM
+ address
+
+Updates the correct AIOP SRAM address in DTS file.
+
+Signed-off-by: Rajesh Bhagat <rajesh.bhagat@nxp.com>
+---
+ arch/arm64/boot/dts/freescale/fsl-la1575a.dtsi | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/arch/arm64/boot/dts/freescale/fsl-la1575a.dtsi b/arch/arm64/boot/dts/freescale/fsl-la1575a.dtsi
+index 62a1c01..7971480 100644
+--- a/arch/arm64/boot/dts/freescale/fsl-la1575a.dtsi
++++ b/arch/arm64/boot/dts/freescale/fsl-la1575a.dtsi
+@@ -733,7 +733,7 @@
+ 			*	1xxxx Reserved
+ 			*/
+ 			atu_win_1 = <0x81 0xf0000000 0x0 0x0c 0x0 0xf0000000>;
+-			atu_win_2 = <0x4c 0x0400000 0x0 0x05 0x0 0x54000000>;
++			atu_win_2 = <0x4c 0x04000000 0x0 0x05 0x0 0x54000000>;
+ 		};
+ 
+ 		vspa0: vspa@0xa000000 {
+-- 
+2.7.4
+

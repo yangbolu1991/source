@@ -1,0 +1,30 @@
+From 455be9772862587ae7a6fac1fbec3d13e51da041 Mon Sep 17 00:00:00 2001
+From: Yangbo Lu <yangbo.lu@nxp.com>
+Date: Mon, 10 Jul 2017 15:06:23 +0800
+Subject: [PATCH] mtd: spi-nor: fsl_quad: continue the probe without is-rf-dev
+ property
+
+Signed-off-by: Yangbo Lu <yangbo.lu@nxp.com>
+---
+ drivers/mtd/spi-nor/fsl-quadspi.c | 4 +---
+ 1 file changed, 1 insertion(+), 3 deletions(-)
+
+diff --git a/drivers/mtd/spi-nor/fsl-quadspi.c b/drivers/mtd/spi-nor/fsl-quadspi.c
+index 4697131..651d389 100644
+--- a/drivers/mtd/spi-nor/fsl-quadspi.c
++++ b/drivers/mtd/spi-nor/fsl-quadspi.c
+@@ -1574,10 +1574,8 @@ static int fsl_qspi_probe(struct platform_device *pdev)
+ 		return -ENOMEM;
+ 
+ 	ret = of_property_read_u32(np, "is-rf-dev", &is_rf_dev);
+-	if (ret < 0) {
++	if (ret < 0)
+ 		dev_err(dev, "is-rf-dev attribute not found\n");
+-		return -ENODEV;
+-	}
+ 
+ 	if(is_rf_dev) {
+ 		q->rf_num = of_get_child_count(dev->of_node);
+-- 
+2.7.4
+

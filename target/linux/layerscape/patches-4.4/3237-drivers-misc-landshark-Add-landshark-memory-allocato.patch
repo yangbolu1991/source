@@ -1,0 +1,590 @@
+From e8cd8e47b4eebc16c56f855b05ca43160fe2bfc7 Mon Sep 17 00:00:00 2001
+From: Rajesh Bhagat <rajesh.bhagat@nxp.com>
+Date: Mon, 10 Apr 2017 10:20:52 +0530
+Subject: [PATCH 04/26] drivers: misc: landshark: Add landshark memory
+ allocator
+
+Signed-off-by: Abhimanyu Saini <abhimanyu.saini@nxp.com>
+Signed-off-by: Rajesh Bhagat <rajesh.bhagat@nxp.com>
+---
+ Documentation/devicetree/bindings/landshark.txt |  25 ++
+ Documentation/misc-devices/landshark.txt        |  30 +++
+ arch/arm64/boot/dts/freescale/fsl-la1575a.dtsi  |  16 ++
+ drivers/misc/Kconfig                            |   8 +
+ drivers/misc/Makefile                           |   1 +
+ drivers/misc/landshark.c                        | 314 ++++++++++++++++++++++++
+ drivers/misc/landshark.h                        |  47 ++++
+ include/uapi/linux/landshark.h                  |  63 +++++
+ 8 files changed, 504 insertions(+)
+ create mode 100644 Documentation/devicetree/bindings/landshark.txt
+ create mode 100644 Documentation/misc-devices/landshark.txt
+ create mode 100644 drivers/misc/landshark.c
+ create mode 100644 drivers/misc/landshark.h
+ create mode 100644 include/uapi/linux/landshark.h
+
+diff --git a/Documentation/devicetree/bindings/landshark.txt b/Documentation/devicetree/bindings/landshark.txt
+new file mode 100644
+index 0000000..80bf2b0
+--- /dev/null
++++ b/Documentation/devicetree/bindings/landshark.txt
+@@ -0,0 +1,25 @@
++Kernel driver landshark
++=======================
++
++Supported chips:
++Freescale LA1575A, Medusa, DFE4400
++
++Device Tree Entry
++-----------------
++
++landshark@0d100000 { /* LandShark */
++	compatible = "fsl,landshark";
++	address = <0x0d100000>;
++	length = <0x00004000>;
++	status = "okay";
++}
++
++address
++-------
++
++Specifies the start of Physical Memory address to be used for Landshark
++
++length
++------
++
++Specifies the length of Physical Memory available for Landshark
+diff --git a/Documentation/misc-devices/landshark.txt b/Documentation/misc-devices/landshark.txt
+new file mode 100644
+index 0000000..631756d
+--- /dev/null
++++ b/Documentation/misc-devices/landshark.txt
+@@ -0,0 +1,30 @@
++Kernel driver landshark
++=======================
++
++Supported chips:
++Freescale Medusa, DFE4400
++
++Data sheet:
++Not freely available
++
++Author:
++Arpit Goel <B44344@freescale.com>
++Rajesh Bhagat <rajesh.bhagat@nxp.com>
++
++Description
++-----------
++
++Lansdshark is a memory allocator providing dyanmic memory management for
++non-cacheable memory. Memory to be used for Landshark is decided at boot,
++boot parameters for Linux boot are modified to hide landshark memory from
++kernel. At linux boot landshark kernel driver parses device tree entry
++and stores that information for future use. This memory is further used by
++user space library to allocate memory to requesting threads/processes.
++
++Boot Parameters
++---------------
++setenv bootargs 'root=/dev/ram rw console=ttymxc3,115200 ramdisk_size=600000
++		mem=1024M rootfstype=ext2 earlyprintk'
++
++"mem" parameter in bootargs specifies total memory visible to kernel at boot
++time.
+diff --git a/arch/arm64/boot/dts/freescale/fsl-la1575a.dtsi b/arch/arm64/boot/dts/freescale/fsl-la1575a.dtsi
+index 57008e4..69177fc 100644
+--- a/arch/arm64/boot/dts/freescale/fsl-la1575a.dtsi
++++ b/arch/arm64/boot/dts/freescale/fsl-la1575a.dtsi
+@@ -643,4 +643,20 @@
+ 		reg = <0x00000000 0x80000000 0 0x80000000>;
+ 		      /* DRAM space 1 - 2 GB DRAM */
+ 	};
++
++	reserved-memory {
++		#address-cells = <2>;
++		#size-cells = <2>;
++		ranges;
++
++		landshark_reserved: landshark@0x81f0000000 {
++			size = <0x0 0x10000000>;
++		};
++	};
++
++	landshark@0x81F0000000 {
++		compatible = "fsl,landshark";
++		address = <0x81 0xf0000000>;
++		length = <0x10000000>;
++	};
+ };
+diff --git a/drivers/misc/Kconfig b/drivers/misc/Kconfig
+index 416d040..87a7c84 100644
+--- a/drivers/misc/Kconfig
++++ b/drivers/misc/Kconfig
+@@ -562,6 +562,14 @@ config VSPA
+ 	  The VSPA kernel driver is the part of user space library providing
+ 	  primitives for the VSPA driver in user space
+ 
++config LANDSHARK
++	tristate "Landshark Memory Driver"
++	depends on ARM64 && ARCH_LAYERSCAPE
++	default y
++	help
++	  The Landshark is the kernel driver part of the user space memory
++	  management library.
++
+ source "drivers/misc/c2port/Kconfig"
+ source "drivers/misc/eeprom/Kconfig"
+ source "drivers/misc/cb710/Kconfig"
+diff --git a/drivers/misc/Makefile b/drivers/misc/Makefile
+index ddf0776..d81fab1 100644
+--- a/drivers/misc/Makefile
++++ b/drivers/misc/Makefile
+@@ -57,4 +57,5 @@ obj-$(CONFIG_GENWQE)		+= genwqe/
+ obj-$(CONFIG_ECHO)		+= echo/
+ obj-$(CONFIG_VEXPRESS_SYSCFG)	+= vexpress-syscfg.o
+ obj-$(CONFIG_CXL_BASE)		+= cxl/
++obj-$(CONFIG_LANDSHARK)         += landshark.o
+ obj-$(CONFIG_VSPA)		+= vspa/
+diff --git a/drivers/misc/landshark.c b/drivers/misc/landshark.c
+new file mode 100644
+index 0000000..8686d00
+--- /dev/null
++++ b/drivers/misc/landshark.c
+@@ -0,0 +1,314 @@
++/* drivers/misc/landshark.c
++ *
++ * Landshark Driver
++ * This driver is designed for support to user space Landshark memory
++ * allocator Library.
++ *
++ * Authors: Arpit Goel <B44344@freescale.com>
++ *          Rajesh Bhagat <rajesh.bhagat@nxp.com>
++ *
++ * Copyright 2016 Freescale Semiconductor, Inc.
++ *
++ * This program is free software; you can redistribute  it and/or modify it
++ * under  the terms of  the GNU General  Public License as published by the
++ * Free Software Foundation;  either version 2 of the  License, or (at your
++ * option) any later version.
++ *  */
++
++#include <linux/of_device.h>
++#include <linux/of_irq.h>
++#include <linux/module.h>
++#include <linux/errno.h>
++#include <linux/fs.h>
++#include <linux/cdev.h>
++#include <linux/uaccess.h>
++#include <linux/io.h>
++#include <linux/mman.h>
++#include <linux/of.h>
++#include <linux/slab.h>
++#include <uapi/linux/landshark.h>
++#include "landshark.h"
++
++/* driver interface */
++static struct class *dev_class;
++static struct device *dev_device;
++static dev_t devno;
++static struct cdev dev_cdev;
++
++/* Information regarding the buffer pool and size */
++struct phys_mem_info landshark_phys_mem = {
++	.dmaregion_addr = 0,
++	.dmaregion_addr_len = 0,
++};
++
++/* Information regarding the metadata and its size */
++struct pinit_info landshark_pinit_info = {
++	.nondma_memory	= 0,
++	.pinit_done = 0,
++	.pinit_size = 0,
++};
++static const struct file_operations landshark_fops = {
++	.owner		=	THIS_MODULE,
++	.llseek		=	NULL,
++	.read		=	NULL,
++	.write		=	NULL,
++	.poll		=	NULL,
++	.unlocked_ioctl	=	landshark_ioctl,
++	.mmap		=	landshark_mmap,
++	.open		=	landshark_open,
++	.flush		=	NULL,
++	.release	=	landshark_release,
++	.fsync		=	NULL,
++	.fasync		=	NULL,
++	.lock		=	NULL,
++};
++
++long landshark_ioctl(struct file *file,	unsigned int cmd, unsigned long arg)
++{
++	int result = 0;
++	struct pinit_info ls_pinit_info = { 0, 0, 0};
++
++	switch (cmd) {
++
++	case LANDSHARK_MEM_INFO_GET:/* for writing data to arg */
++		result = copy_to_user((struct phys_mem_info *)arg,
++				&landshark_phys_mem,
++				sizeof(landshark_phys_mem));
++		break;
++
++	/* This IOCTL is used to set the information regarding
++	 * the process intialization of the pool information, it is only
++	 * initialized once,and cleared on final exit of the process.
++	 * On final exit allocated memory (for metadata) is free'd
++	 */
++	case LANDSHARK_INIT_INFO_SET:
++		result = copy_from_user(
++				(struct pinit_info *)&ls_pinit_info,
++				(struct pinit_info *)arg,
++				sizeof(struct pinit_info));
++		if (result < 0)
++			return result;
++
++		landshark_pinit_info.pinit_done = ls_pinit_info.pinit_done;
++
++		/* If the request is to release the metadata ? */
++		if ((ls_pinit_info.pinit_done == 0)
++				&& (ls_pinit_info.pinit_size == 0)) {
++
++			kfree((void *)landshark_pinit_info.nondma_memory);
++
++			landshark_pinit_info.pinit_size = 0;
++			landshark_pinit_info.nondma_memory = 0;
++		}
++		break;
++
++	/* This IOCTL is used by the user library to get the size
++	 * of the metadata memory and accordingly the process can
++	 * invoke mmap to map the metadata into its address space
++	 */
++	case LANDSHARK_INIT_INFO_GET:
++		result = copy_to_user((struct pinit_info *)arg,
++				(struct pinit_info *)&landshark_pinit_info,
++				sizeof(struct pinit_info));
++		break;
++
++	default:
++		result = -EINVAL;
++	}
++	return result;
++}
++
++static s32 landshark_mmap(struct file *filp, struct vm_area_struct *vma)
++{
++	int result = 0;
++	dma_addr_t phy_addr = 0, start = 0;
++	unsigned long len = 0;
++
++
++	if (vma->vm_pgoff == 0) {
++
++		if (landshark_phys_mem.dmaregion_addr_len <
++				(vma->vm_end - vma->vm_start)) {
++			result = -ENOMEM;
++			goto return_result;
++		}
++
++		vma->vm_page_prot = pgprot_noncached(vma->vm_page_prot);
++
++		result = remap_pfn_range(vma,
++				vma->vm_start,
++				landshark_phys_mem.dmaregion_addr >> PAGE_SHIFT,
++				vma->vm_end - vma->vm_start,
++				vma->vm_page_prot);
++
++	} else /* Allocate and mmap persistent metadata memory */ {
++
++		len = vma->vm_end - vma->vm_start;
++
++		/* Memory for metadat is allocated only once,
++		 * and all process refer to the same allocated memory */
++		if ((void *)landshark_pinit_info.nondma_memory == NULL) {
++
++			landshark_pinit_info.nondma_memory =
++				(dma_addr_t) kzalloc(len, GFP_KERNEL);
++
++			if ((void *)landshark_pinit_info.nondma_memory
++				== NULL) {
++				pr_err("No memory for storing landshark meta data\n");
++				return -ENOMEM;
++			}
++			landshark_pinit_info.pinit_size = len;
++		}
++
++		phy_addr = virt_to_phys
++			((void *)landshark_pinit_info.nondma_memory);
++
++		/* Align the start address */
++		start = phy_addr & PAGE_MASK;
++
++		/* Align the size to PAGE Size */
++		len = PAGE_ALIGN((start & ~PAGE_MASK)
++			+ landshark_pinit_info.pinit_size);
++
++		result = remap_pfn_range(vma,
++				vma->vm_start,
++				(start >> PAGE_SHIFT),
++				vma->vm_end - vma->vm_start,
++				vma->vm_page_prot);
++	}
++return_result:
++	return result;
++}
++
++static s32 landshark_open(struct inode *inode, struct file *file)
++{
++	MOD_INC_USE_COUNT;
++	pr_debug(MOD_NAME ": Device open\n");
++	return 0;
++}
++
++static s32 landshark_release(struct inode *inode, struct file *filp)
++{
++	MOD_DEC_USE_COUNT;
++	pr_debug(MOD_NAME ": Device closed\n");
++	return 0;
++}
++
++static const struct of_device_id landshark_ids[] = {
++	{ .compatible = "fsl,landshark"},
++	{	}
++};
++
++
++static struct platform_driver landshark_driver = {
++	.probe = landshark_probe,
++	.remove = landshark_remove,
++	.driver = {
++		.name = "fsl,landshark",
++		.owner = THIS_MODULE,
++		.of_match_table = landshark_ids,
++	 },
++};
++
++static s32 landshark_probe(struct platform_device *ofdev)
++{
++	struct device_node *np = ofdev->dev.of_node;
++	int result = 0;
++
++	/* Read DTS entry*/
++	if (of_property_read_u32(np, "length",
++				&landshark_phys_mem.dmaregion_addr_len) < 0) {
++		pr_err(MOD_NAME " length not found in Device Tree.\n");
++		result = -EINVAL;
++		goto return_result;
++	}
++	if (of_property_read_u64(np, "address",
++				&landshark_phys_mem.dmaregion_addr) < 0) {
++		pr_err(MOD_NAME " address not found in Device Tree.\n");
++		result = -EINVAL;
++		goto return_result;
++	}
++
++	/* Aligning length and address to PAGE_SIZE boundaries*/
++	landshark_phys_mem.dmaregion_addr =
++		PAGE_ALIGN(landshark_phys_mem.dmaregion_addr);
++
++	landshark_phys_mem.dmaregion_addr_len =
++		PAGE_ALIGN(landshark_phys_mem.dmaregion_addr_len);
++
++	/* registering LANDSHARK driver */
++	result = alloc_chrdev_region(&devno, 0, 1, MOD_NAME);
++	if (result) {
++		pr_err(MOD_NAME " alloc_chrdev_region() failed: err %d",
++			result);
++		goto return_result;
++	}
++	pr_debug(MOD_NAME ": major:%d minor:%d\n", MAJOR(devno), MINOR(devno));
++
++	/* create the device class */
++	dev_class = class_create(THIS_MODULE, MOD_NAME);
++	if (IS_ERR(dev_class)) {
++		result = PTR_ERR(dev_class);
++		pr_err(MOD_NAME" class_create() failed, err = %d\n", result);
++		goto class_fail;
++	}
++
++	/* create character device */
++	cdev_init(&dev_cdev, &landshark_fops);
++	dev_cdev.owner = THIS_MODULE;
++	result = cdev_add(&dev_cdev, devno, 1);
++	if (result) {
++		pr_err(MOD_NAME " cdev_add() failed, err = %d\n", result);
++		goto cdev_fail;
++	}
++
++	/* create the device node in /dev */
++	dev_device = device_create(dev_class, NULL, devno, NULL, MOD_NAME);
++	if (NULL == dev_device) {
++		result = PTR_ERR(dev_device);
++		pr_err(MOD_NAME " device_create() failed, err = %d\n", result);
++		goto dev_fail;
++	}
++
++	pr_info(MOD_NAME ": addr %pa, size 0x%08x\n",
++		&landshark_phys_mem.dmaregion_addr,
++		landshark_phys_mem.dmaregion_addr_len);
++
++	return 0;
++
++dev_fail:
++	cdev_del(&dev_cdev);
++cdev_fail:
++	class_destroy(dev_class);
++class_fail:
++	unregister_chrdev_region(devno, 1);
++return_result:
++	return result;
++}
++
++static s32 landshark_remove(struct platform_device *ofdev)
++{
++	device_destroy(dev_class, devno);
++	cdev_del(&dev_cdev);
++	class_destroy(dev_class);
++	unregister_chrdev_region(devno, 1);
++	return 0;
++}
++
++static s32 __init init_landshark(void)
++{
++	return platform_driver_register(&landshark_driver);
++
++}
++
++static void __exit exit_landshark(void)
++{
++	platform_driver_unregister(&landshark_driver);
++}
++
++module_init(init_landshark);
++module_exit(exit_landshark);
++
++MODULE_LICENSE("GPL v2");
++MODULE_AUTHOR("Freescale Semiconductor, Inc.");
++MODULE_DESCRIPTION("Freescale Landshark Driver");
+diff --git a/drivers/misc/landshark.h b/drivers/misc/landshark.h
+new file mode 100644
+index 0000000..dd2364f
+--- /dev/null
++++ b/drivers/misc/landshark.h
+@@ -0,0 +1,47 @@
++/* drivers/misc/landshark.h
++ *
++ * Landshark Driver
++ * This driver is designed for support to user space Landshark memory
++ * allocator Library.
++ *
++ * Authors: Arpit Goel <B44344@freescale.com>
++ *          Rajesh Bhagat <rajesh.bhagat@nxp.com>
++ *
++ * Copyright 2016 Freescale Semiconductor, Inc.
++ *
++ * This program is free software; you can redistribute  it and/or modify it
++ * under  the terms of  the GNU General  Public License as published by the
++ * Free Software Foundation;  either version 2 of the  License, or (at your
++ * option) any later version.
++ *
++**/
++
++#ifndef __LANDSHARK_H
++#define __LANDSHARK_H
++
++#define MOD_INC_USE_COUNT
++#define MOD_DEC_USE_COUNT
++
++#define MOD_NAME "landshark"
++#define MOD_VERSION "0.2"
++
++#define LANDSHARK_MAJOR 0
++
++struct phys_mem_info {
++
++	/* Physical address of the memory pool */
++	phys_addr_t dmaregion_addr;
++
++	/* size of the physical memory pool */
++	unsigned int dmaregion_addr_len;
++};
++
++long landshark_ioctl(struct file *file, unsigned int cmd, unsigned long arg);
++static s32 landshark_mmap(struct file *filp, struct vm_area_struct *vma);
++static s32 landshark_open(struct inode *inode, struct file *file);
++static s32 landshark_release(struct inode *inode, struct file *filp);
++
++static s32 landshark_probe(struct platform_device *ofdev);
++static s32 landshark_remove(struct platform_device *ofdev);
++
++#endif /*__LANDSHARK_H*/
+diff --git a/include/uapi/linux/landshark.h b/include/uapi/linux/landshark.h
+new file mode 100644
+index 0000000..dc62183
+--- /dev/null
++++ b/include/uapi/linux/landshark.h
+@@ -0,0 +1,63 @@
++/*
++ * Copyright (C) 2016 Freescale Semiconductor, Inc.
++ *
++ * Redistribution and use in source and binary forms, with or without
++ * modification, are permitted provided that the following conditions are met:
++ *     * Redistributions of source code must retain the above copyright
++ *       notice, this list of conditions and the following disclaimer.
++ *     * Redistributions in binary form must reproduce the above copyright
++ *       notice, this list of conditions and the following disclaimer in the
++ *       documentation and/or other materials provided with the distribution.
++ *     * Neither the name of Freescale Semiconductor nor the
++ *       names of its contributors may be used to endorse or promote products
++ *       derived from this software without specific prior written permission.
++ *
++ *
++ * ALTERNATIVELY, this software may be distributed under the terms of the
++ * GNU General Public License ("GPL") as published by the Free Software
++ * Foundation, either version 2 of that License or (at your option) any
++ * later version.
++ *
++ * THIS SOFTWARE IS PROVIDED BY Freescale Semiconductor ``AS IS'' AND ANY
++ * EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
++ * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
++ * DISCLAIMED. IN NO EVENT SHALL Freescale Semiconductor BE LIABLE FOR ANY
++ * DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
++ * (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
++ * LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
++ * ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
++ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
++ * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
++ */
++
++
++#ifndef _UAPI_LANDSHARK_H
++#define _UAPI_LANDSHARK_H
++
++#define LANDSHARK_MAGIC_NUM 'M'
++#define LANDSHARK_MEM_INFO_GET _IOW(LANDSHARK_MAGIC_NUM, 1, int)
++
++/* Get if the Ls persitant memory has been initialized
++ * by the user process
++*/
++#define LANDSHARK_INIT_INFO_GET _IOW(LANDSHARK_MAGIC_NUM, 2, int)
++
++/* Allows process to notify to the driver about the
++ * presistant memory intialization
++*/
++#define LANDSHARK_INIT_INFO_SET _IOW(LANDSHARK_MAGIC_NUM, 3, int)
++
++/* Maintains all the information about the metadata memory */
++struct pinit_info {
++
++	/* Memory buffer for LS Meta data */
++	dma_addr_t nondma_memory;
++
++	/* Metadata intialization done by the application ? */
++	unsigned int pinit_done;
++
++	/* Size of the Metadata memory as required by the application */
++	unsigned int pinit_size;
++};
++
++#endif /* _UAPI_LANDSHARK_H */
+-- 
+2.7.4
+

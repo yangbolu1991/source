@@ -1,0 +1,30 @@
+From e65fc1eaa9ff042e8c36fa77ca02e3a5677da0e8 Mon Sep 17 00:00:00 2001
+From: Rajesh Bhagat <rajesh.bhagat@nxp.com>
+Date: Thu, 20 Apr 2017 16:31:30 +0530
+Subject: [PATCH 16/26] drivers: rf: phy: Modifies the RF operation used by
+ QSPI interface
+
+Modifies the RF operation used by QSPI interface
+
+Signed-off-by: Pratiyush Srivastava <pratiyush.srivastava@nxp.com>
+Signed-off-by: Rajesh Bhagat <rajesh.bhagat@nxp.com>
+---
+ include/linux/rfdev.h | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/include/linux/rfdev.h b/include/linux/rfdev.h
+index 56b6e23..8cfb68b 100644
+--- a/include/linux/rfdev.h
++++ b/include/linux/rfdev.h
+@@ -293,7 +293,7 @@ struct qspi_rf *rf_device_get(int rf_id);
+ 
+ #define RF_READ_ADDR_OP		0x00000810
+ #define RF_READ_DATA_OP		0x00001C08
+-#define RF_WRITE_OP		0x0820081b
++#define RF_WRITE_OP		0x0000081b
+ 
+ enum rf_read_mode {
+ 	QSPI_RF_NORMAL = 0,
+-- 
+2.7.4
+

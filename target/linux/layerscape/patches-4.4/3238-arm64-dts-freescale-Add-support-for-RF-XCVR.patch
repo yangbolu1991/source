@@ -1,0 +1,231 @@
+From ac8bff604c75cd3a825ac5a04db0afcd048ee9d5 Mon Sep 17 00:00:00 2001
+From: Rajesh Bhagat <rajesh.bhagat@nxp.com>
+Date: Tue, 11 Apr 2017 09:29:51 +0530
+Subject: [PATCH 10/26] arm64: dts: freescale: Add support for RF XCVR
+
+Adds support for Catena RF tranciever using QSPI
+interface.
+
+Signed-off-by: Pratiyush Srivastava <pratiyush.srivastava@nxp.com>
+Signed-off-by: Rajesh Bhagat <rajesh.bhagat@nxp.com>
+---
+ arch/arm64/boot/dts/freescale/fsl-la1575a-rdb.dts |  55 +++++++++
+ arch/arm64/boot/dts/freescale/fsl-la1575a.dtsi    | 132 ++++++++++++++++++++++
+ 2 files changed, 187 insertions(+)
+
+diff --git a/arch/arm64/boot/dts/freescale/fsl-la1575a-rdb.dts b/arch/arm64/boot/dts/freescale/fsl-la1575a-rdb.dts
+index 71fb558..aaf1c30 100644
+--- a/arch/arm64/boot/dts/freescale/fsl-la1575a-rdb.dts
++++ b/arch/arm64/boot/dts/freescale/fsl-la1575a-rdb.dts
+@@ -21,6 +21,7 @@
+ };
+ 
+ &qspi0 {
++	is-rf-dev = <0>;
+ 	qflash0: s25fs512s@0 {
+ 		compatible = "spansion,m25p80";
+ 		#address-cells = <1>;
+@@ -39,3 +40,57 @@
+ 		reg = <1>;
+ 	};
+ };
++
++&qspi1 {
++	is-rf-dev = <1>;
++	status = "okay";
++};
++
++&qspi2 {
++	is-rf-dev = <1>;
++	status = "okay";
++};
++
++&qspi3 {
++	is-rf-dev = <1>;
++	status = "okay";
++};
++
++&qspi4 {
++	is-rf-dev = <1>;
++	status = "okay";
++};
++
++&qspi5 {
++	is-rf-dev = <1>;
++	status = "okay";
++};
++
++&qspi6 {
++	is-rf-dev = <1>;
++	status = "okay";
++};
++
++&rf0 {
++	status = "okay";
++};
++
++&rf1 {
++	status = "okay";
++};
++
++&rf2 {
++	status = "okay";
++};
++
++&rf3 {
++	status = "okay";
++};
++
++&rf4 {
++	status = "okay";
++};
++
++&rf5 {
++	status = "okay";
++};
+diff --git a/arch/arm64/boot/dts/freescale/fsl-la1575a.dtsi b/arch/arm64/boot/dts/freescale/fsl-la1575a.dtsi
+index 69177fc..2b4c239 100644
+--- a/arch/arm64/boot/dts/freescale/fsl-la1575a.dtsi
++++ b/arch/arm64/boot/dts/freescale/fsl-la1575a.dtsi
+@@ -360,6 +360,138 @@
+ 		status = "okay";
+ 	};
+ 
++	qspi1: quadspi@8b7f000 {
++		compatible = "fsl,ls2080a-qspi", "fsl,ua-qspi";
++		#address-cells = <1>;
++		#size-cells = <0>;
++		reg = <0x0 0x8b7f000 0x0 0x1000>,
++		      <0x4 0x10000000 0x0 0x10000000>;
++		reg-names = "QuadSPI", "QuadSPI-memory";
++		interrupts = <0 242 0x4>; /* Level high type */
++		clocks = <&clockgen 4 3>, <&clockgen 4 3>;
++		clock-names = "qspi_en", "qspi";
++		rf-id = <0>;
++		status = "disabled";
++	};
++
++	rf0: catenaxcvr0@0 {
++		compatible = "fsl,catenaxcvr";
++		spi-max-frequency = <25000000>;
++		reg = <0x0 0x0 0x0 0x0>;
++		rf-id = <0>;
++		status = "disabled";
++	};
++
++	qspi2: quadspi@8b7e000 {
++		compatible = "fsl,ls2080a-qspi", "fsl,ua-qspi";
++		#address-cells = <1>;
++		#size-cells = <0>;
++		reg = <0x0 0x8b7e000 0x0 0x1000>,
++		      <0x4 0x20000000 0x0 0x10000000>;
++		reg-names = "QuadSPI", "QuadSPI-memory";
++		interrupts = <0 243 0x4>; /* Level high type */
++		clocks = <&clockgen 4 3>, <&clockgen 4 3>;
++		clock-names = "qspi_en", "qspi";
++		rf-id = <1>;
++		status = "disabled";
++	};
++
++	rf1: catenaxcvr1@0 {
++		compatible = "fsl,catenaxcvr";
++		spi-max-frequency = <25000000>;
++		reg = <0x0 0x0 0x0 0x0>;
++		rf-id = <1>;
++		status = "disabled";
++	};
++
++	qspi3: quadspi@8b7d000 {
++		compatible = "fsl,ls2080a-qspi", "fsl,ua-qspi";
++		#address-cells = <1>;
++		#size-cells = <0>;
++		reg = <0x0 0x8b7d000 0x0 0x1000>,
++		      <0x4 0x30000000 0x0 0x10000000>;
++		reg-names = "QuadSPI", "QuadSPI-memory";
++		interrupts = <0 244 0x4>; /* Level high type */
++		clocks = <&clockgen 4 3>, <&clockgen 4 3>;
++		clock-names = "qspi_en", "qspi";
++		rf-id = <2>;
++		status = "disabled";
++	};
++
++	rf2: catenaxcvr2@0 {
++		compatible = "fsl,catenaxcvr";
++		spi-max-frequency = <25000000>;
++		reg = <0x0 0x0 0x0 0x0>;
++		rf-id = <2>;
++		status = "disabled";
++	};
++
++	qspi4: quadspi@8b7c000 {
++		compatible = "fsl,ls2080a-qspi", "fsl,ua-qspi";
++		#address-cells = <1>;
++		#size-cells = <0>;
++		reg = <0x0 0x8b7c000 0x0 0x1000>,
++		      <0x4 0x40000000 0x0 0x10000000>;
++		reg-names = "QuadSPI", "QuadSPI-memory";
++		interrupts = <0 245 0x4>; /* Level high type */
++		clocks = <&clockgen 4 3>, <&clockgen 4 3>;
++		clock-names = "qspi_en", "qspi";
++		rf-id = <3>;
++		status = "disabled";
++	};
++
++	rf3: catenaxcvr3@0 {
++		compatible = "fsl,catenaxcvr";
++		spi-max-frequency = <25000000>;
++		reg = <0x0 0x0 0x0 0x0>;
++		rf-id = <3>;
++		status = "disabled";
++	};
++
++	qspi5: quadspi@8b7b000 {
++		compatible = "fsl,ls2080a-qspi", "fsl,ua-qspi";
++		#address-cells = <1>;
++		#size-cells = <0>;
++		reg = <0x0 0x8b7b000 0x0 0x1000>,
++		      <0x4 0x50000000 0x0 0x10000000>;
++		reg-names = "QuadSPI", "QuadSPI-memory";
++		interrupts = <0 246 0x4>; /* Level high type */
++		clocks = <&clockgen 4 3>, <&clockgen 4 3>;
++		clock-names = "qspi_en", "qspi";
++		rf-id = <4>;
++		status = "disabled";
++	};
++
++	rf4: catenaxcvr4@0 {
++		compatible = "fsl,catenaxcvr";
++		spi-max-frequency = <25000000>;
++		reg = <0x0 0x0 0x0 0x0>;
++		rf-id = <4>;
++		status = "disabled";
++	};
++
++	qspi6: quadspi@8b7a000 {
++		compatible = "fsl,ls2080a-qspi", "fsl,ua-qspi";
++		#address-cells = <1>;
++		#size-cells = <0>;
++		reg = <0x0 0x8b7a000 0x0 0x1000>,
++		      <0x4 0x60000000 0x0 0x10000000>;
++		reg-names = "QuadSPI", "QuadSPI-memory";
++		interrupts = <0 247 0x4>; /* Level high type */
++		clocks = <&clockgen 4 3>, <&clockgen 4 3>;
++		clock-names = "qspi_en", "qspi";
++		rf-id = <5>;
++		status = "disabled";
++	};
++
++	rf5: catenaxcvr5@0 {
++		compatible = "fsl,catenaxcvr";
++		spi-max-frequency = <25000000>;
++		reg = <0x0 0x0 0x0 0x0>;
++		rf-id = <5>;
++		status = "disabled";
++	};
++
+ 	pcie@3400000 {
+ 		compatible = "fsl,ls1088a-pcie", "snps,dw-pcie";
+ 		reg = <0x00 0x03400000 0x0 0x00100000
+-- 
+2.7.4
+

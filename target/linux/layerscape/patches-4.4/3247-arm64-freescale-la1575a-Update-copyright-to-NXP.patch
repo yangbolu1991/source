@@ -1,0 +1,52 @@
+From 9927d6ed44b95bb540ea2c82078d421f5e6b32f4 Mon Sep 17 00:00:00 2001
+From: Abhimanyu Saini <abhimanyu.saini@nxp.com>
+Date: Mon, 29 May 2017 15:49:50 +0530
+Subject: [PATCH 21/26] arm64: freescale: la1575a: Update copyright to NXP
+
+Signed-off-by: Abhimanyu Saini <abhimanyu.saini@nxp.com>
+---
+ arch/arm64/boot/dts/freescale/fsl-la1575a-rdb.dts | 2 +-
+ arch/arm64/boot/dts/freescale/fsl-la1575a.dtsi    | 2 +-
+ kernel-la1575a-rdb.its                            | 2 +-
+ 3 files changed, 3 insertions(+), 3 deletions(-)
+
+diff --git a/arch/arm64/boot/dts/freescale/fsl-la1575a-rdb.dts b/arch/arm64/boot/dts/freescale/fsl-la1575a-rdb.dts
+index 78b8265..37df716 100644
+--- a/arch/arm64/boot/dts/freescale/fsl-la1575a-rdb.dts
++++ b/arch/arm64/boot/dts/freescale/fsl-la1575a-rdb.dts
+@@ -1,7 +1,7 @@
+ /*
+  * Device Tree file for NXP's LA1575ARDB board
+  *
+- * Copyright (C) 2017, Freescale Semiconductor
++ * Copyright 2017 NXP
+  *
+  * Abhimanyu Saini <abhimanyu.saini@nxp.com>
+  * Rajesh Bhagat <rajesh.bhagat@nxp.com>
+diff --git a/arch/arm64/boot/dts/freescale/fsl-la1575a.dtsi b/arch/arm64/boot/dts/freescale/fsl-la1575a.dtsi
+index 7971480..fd804d9 100644
+--- a/arch/arm64/boot/dts/freescale/fsl-la1575a.dtsi
++++ b/arch/arm64/boot/dts/freescale/fsl-la1575a.dtsi
+@@ -1,7 +1,7 @@
+ /*
+  * Device Tree Include file for NXP's LA1575A family SoC.
+  *
+- * Copyright (C) 2017, Freescale Semiconductor
++ * Copyright 2017 NXP
+  *
+  * Abhimanyu Saini <abhimanyu.saini@nxp.com>
+  * Rajesh Bhagat <rajesh.bhagat@nxp.com>
+diff --git a/kernel-la1575a-rdb.its b/kernel-la1575a-rdb.its
+index cdf1d5d..cfb3ccb 100644
+--- a/kernel-la1575a-rdb.its
++++ b/kernel-la1575a-rdb.its
+@@ -1,5 +1,5 @@
+ /*
+- * Copyright (C) 2017, Freescale Semiconductor
++ * Copyright 2017 NXP
+  *
+  * Abhimanyu Saini <abhimanyu.saini@nxp.com>
+  * Rajesh Bhagat <rajesh.bhagat@nxp.com>
+-- 
+2.7.4
+

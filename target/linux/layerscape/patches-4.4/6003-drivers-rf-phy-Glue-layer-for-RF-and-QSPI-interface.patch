@@ -1,0 +1,222 @@
+From e8c6c9a95b6ef2a23dfaf2b7d9a706db812596ce Mon Sep 17 00:00:00 2001
+From: Pratiyush Srivastava <pratiyush.srivastava@nxp.com>
+Date: Fri, 17 Mar 2017 10:40:48 +0530
+Subject: [PATCH 09/26] drivers: rf: phy: Glue layer for RF and QSPI interface
+
+Adds the glue later between RF framework and QSPI interface
+
+Signed-off-by: Pratiyush Srivastava <pratiyush.srivastava@nxp.com>
+Signed-off-by: Rajesh Bhagat <rajesh.bhagat@nxp.com>
+---
+ drivers/rf/core/rfdev.c | 17 ++++++++++++++
+ drivers/rf/phy/catena.c | 62 ++++++++++++++++++++++++++++++++++++++++---------
+ include/linux/rfdev.h   | 46 ++++++++++++++++++++++++++++++++++++
+ 3 files changed, 114 insertions(+), 11 deletions(-)
+
+diff --git a/drivers/rf/core/rfdev.c b/drivers/rf/core/rfdev.c
+index de6846b..5730557 100644
+--- a/drivers/rf/core/rfdev.c
++++ b/drivers/rf/core/rfdev.c
+@@ -69,6 +69,10 @@ const static struct file_operations rf_fops = {
+ #endif
+ };
+ 
++#ifdef CONFIG_ARCH_LAYERSCAPE
++struct qspi_rf qspi_rf_dev[6];
++#endif
++
+ struct rf_ctrl_dev *allocate_rf_ctrl_dev(size_t priv_size,
+ 		unsigned long flags)
+ {
+@@ -1240,6 +1244,19 @@ int rf_update_master_slave_status(void) { return 0;}
+ #endif
+ EXPORT_SYMBOL(rf_update_master_slave_status);
+ 
++#ifdef CONFIG_ARCH_LAYERSCAPE
++int rf_device_register(int rf_id, struct qspi_rf *rf)
++{
++	memcpy(&qspi_rf_dev[rf_id], rf, sizeof(struct qspi_rf));
++	return 0;
++}
++
++struct qspi_rf * rf_device_get(int rf_id)
++{
++	return &qspi_rf_dev[rf_id];
++}
++#endif
++
+ static int __init rf_init(void)
+ {
+ 	int rc;
+diff --git a/drivers/rf/phy/catena.c b/drivers/rf/phy/catena.c
+index d95a329..ebd49ea 100644
+--- a/drivers/rf/phy/catena.c
++++ b/drivers/rf/phy/catena.c
+@@ -39,6 +39,7 @@
+ #define DRV_DESC "FREESCALE DEVELOPED CATENA PHY DRIVER"
+ #define DRV_NAME "catena_phy"
+ #define DEBUG
++#define MIN_BYTE_WRITE_RF	4
+ 
+ MODULE_LICENSE("GPL v2");
+ MODULE_DESCRIPTION(DRV_DESC);
+@@ -61,30 +62,31 @@ static struct rf_phy_ops catena_phy_ops = {
+ 	.stop = catena_phy_stop
+ };
+ 
+-
+ int catena_phy_run_cmds(struct rf_phy_dev *catena_phy,
+ 		struct rif_phy_cmd *cmds, int count)
+ {
+ 	int i;
+ 	u32 val = 0;
+-	struct catena_dev_info *phy_info;
+-
+-	phy_info = (struct catena_dev_info *) catena_phy->priv;
+ 
+ 	for (i = 0; i < count; i++) {
+ 		switch (cmds[i].cmd) {
+ 		case SPI_WRITE:
+-			pr_info("Write: %x %x\n", cmds[i].param1,
+-							cmds[i].param2);
++
++			catena_phy_write(catena_phy, cmds[i].param1,
++				cmds[i].param2);
++			pr_debug("Write: %x %x\n", cmds[i].param1,
++				cmds[i].param2);
+ 			break;
+ 
+ 		case SPI_READ:
+-			pr_info("Read from reg: %x, val %x\n",
+-				cmds[i].param1, val);
++
++			catena_phy_read(catena_phy, cmds[i].param1, 1, &val);
++			pr_debug("Read from reg: %x, val %x\n", cmds[i].param1,
++				val);
+ 			break;
+ 
+ 		case SPI_WAIT:
+-			pr_info("Wait %d\n", cmds[i].param3);
++			pr_debug("Wait %d\n", cmds[i].param3);
+ 			msleep_interruptible(cmds[i].param3);
+ 			break;
+ 
+@@ -116,13 +118,51 @@ int catena_phy_start(struct rf_phy_dev *catena_phy)
+ int catena_phy_read(struct rf_phy_dev *catena_phy, u32 start,
+ 		u32 count, u32 *buff)
+ {
+-	return 0;
++	struct catena_dev_info *phy_info;
++	struct qspi_rf * rf;
++	u16 read_addr;
++	u32 val = 0;
++	int j = 0, ret = 0;
++
++	phy_info = (struct catena_dev_info *) catena_phy->priv;
++	rf = rf_device_get(phy_info->rf_id);
++
++	if (!rf)
++		return -EINVAL;
++
++        read_addr =  (u16)(start + count - 1);
++        j = count - 1;
++
++	while (j >= 0) {
++		ret = rf->read_reg(rf, QSPI_OP_RF_READ_ADD, read_addr,
++				&val, MIN_BYTE_WRITE_RF);
++		if (ret)
++			break;
++
++		buff[j--] = val;
++		read_addr--;
++	}
++
++	return ret;
+ }
+ 
+ int catena_phy_write(struct rf_phy_dev *catena_phy, u32 reg,
+ 		u32 data)
+ {
+-	return 0;
++	struct catena_dev_info *phy_info;
++	struct qspi_rf * rf;
++	int ret = 0;
++
++	phy_info = (struct catena_dev_info *) catena_phy->priv;
++	rf = rf_device_get(phy_info->rf_id);
++
++	if (!rf)
++		return -EINVAL;
++
++	ret = rf->write_reg(rf, QSPI_OP_RF_WRITE, reg,
++			(u8 *)&data, MIN_BYTE_WRITE_RF);
++
++	return ret;
+ }
+ 
+ static int dummy_rf_init(struct rf_ctrl_dev *rf_dev,
+diff --git a/include/linux/rfdev.h b/include/linux/rfdev.h
+index 993f42f..56b6e23 100644
+--- a/include/linux/rfdev.h
++++ b/include/linux/rfdev.h
+@@ -230,6 +230,32 @@ struct rf_ctrl_ops {
+ 			struct rf_channel *chan);
+ };
+ 
++#ifdef CONFIG_ARCH_LAYERSCAPE
++#define SPI_RF_MAX_CMD_SIZE     8
++#define SPI_NOR_MAX_CMD_SIZE	8
++enum qspi_rf_ops {
++	QSPI_RF_OPS_READ = 0,
++	QSPI_RF_OPS_WRITE,
++	QSPI_RF_OPS_ERASE,
++};
++
++
++struct qspi_rf {
++        struct device           *dev;
++        u32                     rf_id;
++	u8			addr_width;
++	u8			cmd_buf[SPI_NOR_MAX_CMD_SIZE];
++
++        int (*prepare)(struct qspi_rf *rf, enum qspi_rf_ops ops);
++        void (*unprepare)(struct qspi_rf *rf, enum qspi_rf_ops ops);
++
++        int (*read_reg)(struct qspi_rf *rf, u8 opcode, u32 addr, u32 *buf, int len);
++        int (*write_reg)(struct qspi_rf *rf, u8 opcode, u32 addr, u8 *buf, int len);
++
++        void *priv;
++};
++#endif
++
+ struct	rf_ctrl_dev *allocate_rf_ctrl_dev(size_t priv_size,
+ 			unsigned long flags);
+ int 	free_rf_ctrl_dev(struct rf_ctrl_dev *rf_dev);
+@@ -255,4 +281,24 @@ int	aic_get_lane_id(struct rf_ctrl_dev *rf_dev);
+ #define SVR_9132S		0x86180010
+ #define SVR_9132S_REV1		0x86180011
+ 
++#ifdef CONFIG_ARCH_LAYERSCAPE
++int rf_device_register(int rf_id, struct qspi_rf *rf);
++struct qspi_rf *rf_device_get(int rf_id);
++#endif
++/*Using the opcodes created by Verification team in their test-cases*/
++
++#define QSPI_OP_RF_READ_ADD	0x01
++#define QSPI_OP_RF_READ		0x02
++#define QSPI_OP_RF_WRITE	0x03
++
++#define RF_READ_ADDR_OP		0x00000810
++#define RF_READ_DATA_OP		0x00001C08
++#define RF_WRITE_OP		0x0820081b
++
++enum rf_read_mode {
++	QSPI_RF_NORMAL = 0,
++	QSPI_RF_FAST,
++	QSPI_RF_DUAL,
++};
++
+ #endif
+-- 
+2.7.4
+
