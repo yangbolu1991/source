@@ -1,0 +1,25 @@
+From dd7f66ed96076532ce351424adca1729095f948a Mon Sep 17 00:00:00 2001
+From: Yangbo Lu <yangbo.lu@nxp.com>
+Date: Fri, 21 Jul 2017 15:25:17 +0800
+Subject: [PATCH 1/2] rftool: remove useless error.h
+
+Signed-off-by: Yangbo Lu <yangbo.lu@nxp.com>
+---
+ rftool/freq_corr_main.c | 1 -
+ 1 file changed, 1 deletion(-)
+
+diff --git a/rftool/freq_corr_main.c b/rftool/freq_corr_main.c
+index d6df981..106c213 100755
+--- a/rftool/freq_corr_main.c
++++ b/rftool/freq_corr_main.c
+@@ -14,7 +14,6 @@
+ 
+ #include <unistd.h>
+ #include <net/if.h>
+-#include <error.h>
+ #include "utilities.h"
+ #include "rftool.h"
+ #include "freq_correction.h"
+-- 
+2.1.0.27.g96db324
+

@@ -1,0 +1,23 @@
+From 8c055fedbc691611927b7e93774587f3eb659023 Mon Sep 17 00:00:00 2001
+From: Yangbo Lu <yangbo.lu@nxp.com>
+Date: Fri, 21 Jul 2017 16:24:48 +0800
+Subject: [PATCH 2/2] rftool: build with -Wno-error=format-security
+
+Signed-off-by: Yangbo Lu <yangbo.lu@nxp.com>
+---
+ rftool/Makefile | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/rftool/Makefile b/rftool/Makefile
+index 1327cc3..21bc57c 100644
+--- a/rftool/Makefile
++++ b/rftool/Makefile
+@@ -1,4 +1,4 @@
+-CFLAGS  += -c
++CFLAGS  += -c -Wno-error=format-security
+ LDFLAGS += -lm
+ 
+ ifeq ($(ARCH), "powerpc")
+-- 
+2.1.0.27.g96db324
+
