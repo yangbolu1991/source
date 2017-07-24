@@ -1,0 +1,78 @@
+From 68352f57b4d97a0da974b679e8a0ba10a08f6201 Mon Sep 17 00:00:00 2001
+From: Yangbo Lu <yangbo.lu@nxp.com>
+Date: Tue, 25 Jul 2017 15:54:38 +0800
+Subject: [PATCH 2/2] lua: remove useless send_command function
+
+Signed-off-by: Yangbo Lu <yangbo.lu@nxp.com>
+---
+ lua/vspa/vspa_api.lua | 54 ---------------------------------------------------
+ 1 file changed, 54 deletions(-)
+
+diff --git a/lua/vspa/vspa_api.lua b/lua/vspa/vspa_api.lua
+index ad58bb4..f68f92f 100644
+--- a/lua/vspa/vspa_api.lua
++++ b/lua/vspa/vspa_api.lua
+@@ -137,60 +137,6 @@ function dev_load_image(dev, pool_ctx, c_cfg, b_cfg)
+ 	return 0
+ end
+ 
+-function send_command(dev, command)
+-	local buffer = libvspa_gc.new_uint32array(100)
+-	local flags = 0;
+-
+-	libvspa_gc.uint32array_setitem(buffer, 0, 0)
+-	libvspa_gc.uint32array_setitem(buffer, 1, 0)
+-	if (command.bulk_data_len == nil) then
+-		libvspa_gc.uint32array_setitem(buffer, 2, 0)
+-	else
+-		libvspa_gc.uint32array_setitem(buffer, 2, command.bulk_data_len)
+-	end
+-	if (command.bulk_data_phys == nil) then
+-		libvspa_gc.uint32array_setitem(buffer, 3, 0)
+-		libvspa_gc.uint32array_setitem(buffer, 4, 0)
+-	else
+-		libvspa_gc.uint32array_setitem(buffer, 3, command.bulk_data_phys & 0xFFFFFFFF)
+-		libvspa_gc.uint32array_setitem(buffer, 4, command.bulk_data_phys & 0xFFFFFFFF00000000)
+-	end
+-	if (command.reply_buf_len == nil) then
+-		libvspa_gc.uint32array_setitem(buffer, 5, 0)
+-	else
+-		libvspa_gc.uint32array_setitem(buffer, 5, command.reply_buf_len)
+-		if (command.reply_buf_len > 0) then
+-			flags = libvspa_gc.LIBVSPA_FLAG_CMD_EXPECT_REPLY |
+-				libvspa_gc.LIBVSPA_FLAG_CMD_REPORT_REPLY;
+-		end
+-	end
+-	if (command.reply_buf_phys == nil) then
+-		libvspa_gc.uint32array_setitem(buffer, 6, 0)
+-		libvspa_gc.uint32array_setitem(buffer, 7, 0)
+-	else
+-		libvspa_gc.uint32array_setitem(buffer, 6, command.reply_buf_phys & 0xFFFFFFFF)
+-		libvspa_gc.uint32array_setitem(buffer, 7, command.reply_buf_phys & 0xFFFFFFFF00000000)
+-	end
+-
+-	offset = libvspa_gc.app_start_addr()
+-	for i=1,command.payld_len/4, 1 do
+-		if(command.payld[i] == nil) then
+-			print("Invalid command payload")
+-			return -1
+-		end
+-		libvspa_gc.uint32array_setitem(buffer, 7+i, command.payld[i])
+-	end
+-
+-	ret = libvspa_gc.libvspa_dev_cmd_write(dev, command.cookie, flags,
+-		libvspa_gc.int32p2cmdp(buffer), command.payld_len + 32)
+-	if ret < 0 then
+-		print("Payload dump:");
+-		libvspa_gc.libvspa_perror("send command", ret)
+-		return -1
+-	end
+-	return 0
+-end
+-
+ function receive_reply(dev, timeout)
+ 	local cookie = libvspa_gc.new_intarray(1)
+ 
+-- 
+2.1.0.27.g96db324
+

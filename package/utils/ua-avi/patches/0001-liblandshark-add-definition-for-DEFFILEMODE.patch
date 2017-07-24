@@ -1,0 +1,28 @@
+From cabc9789692c9c056791d20b17f85c55b6b34050 Mon Sep 17 00:00:00 2001
+From: Yangbo Lu <yangbo.lu@nxp.com>
+Date: Mon, 24 Jul 2017 18:22:03 +0800
+Subject: [PATCH 1/2] liblandshark: add definition for DEFFILEMODE
+
+Signed-off-by: Yangbo Lu <yangbo.lu@nxp.com>
+---
+ lib/liblandshark/src/liblandshark.c | 4 ++++
+ 1 file changed, 4 insertions(+)
+
+diff --git a/lib/liblandshark/src/liblandshark.c b/lib/liblandshark/src/liblandshark.c
+index f32bf17..459734b 100644
+--- a/lib/liblandshark/src/liblandshark.c
++++ b/lib/liblandshark/src/liblandshark.c
+@@ -31,6 +31,10 @@
+ #include "landshark.h"
+ #include "liblandshark_private.h"
+ 
++#ifndef DEFFILEMODE
++#define DEFFILEMODE (S_IRUSR|S_IWUSR|S_IRGRP|S_IWGRP|S_IROTH|S_IWOTH)
++#endif
++
+ /* Minimum Log level; logs error conditions */
+ #define LIBLS_LOG_ERR		1
+ /* Medium Log level; logs informational and error cases */
+-- 
+2.1.0.27.g96db324
+
