@@ -1,0 +1,31 @@
+From d357fd2645bc6a5689df10cbc6684798a5a1321a Mon Sep 17 00:00:00 2001
+From: Victor Popescu <victor.popescu@nxp.com>
+Date: Tue, 6 Jun 2017 10:12:52 +0300
+Subject: [PATCH 3/8] Add fslwifi device to the LA1575A device tree
+
+Signed-off-by: Victor Popescu <victor.popescu@nxp.com>
+---
+ arch/arm64/boot/dts/freescale/fsl-la1575a.dtsi | 7 +++++++
+ 1 file changed, 7 insertions(+)
+
+diff --git a/arch/arm64/boot/dts/freescale/fsl-la1575a.dtsi b/arch/arm64/boot/dts/freescale/fsl-la1575a.dtsi
+index 7971480..dd91b9f 100644
+--- a/arch/arm64/boot/dts/freescale/fsl-la1575a.dtsi
++++ b/arch/arm64/boot/dts/freescale/fsl-la1575a.dtsi
+@@ -793,6 +793,13 @@
+ 		};
+ 	};
+ 
++	fsl_aiop: fsl-wifi@49C4100000 {
++		compatible = "fsl,fsl-wifi";
++		#stream-id-cells = <2>;
++		reg = <0x00000049 0xc4100000 0 0x400>;	 /* AIOP portal base */
++		msi-parent = <&its>;
++	};
++
+ 	memory@80000000 {
+ 		device_type = "memory";
+ 		reg = <0x00000000 0x80000000 0 0x80000000>;
+-- 
+2.1.0.27.g96db324
+
